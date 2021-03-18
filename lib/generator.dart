@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:core';
 import 'dart:core' as core;
 
@@ -28,6 +27,7 @@ class ClassGenerator {
   final Map<String, dynamic> json;
   final bool ignoreBase;
   final bool childrenRequireAggregation;
+  final bool forceBaseClasses;
   final List<BlockGenerator> extraGenerators;
   final BlockCommentGenerator commentGenerator;
 
@@ -51,11 +51,14 @@ class ClassGenerator {
   /// [childrenRequireAggregation] must be set to true if the input is in the
   /// form of members with arrays of multiple responses. This simply invokes
   /// [aggregateMultiple] on each field of the input JSON before conversion.
+  /// [forceBaseClasses] forces all base fields to be classes. Primarily, if a
+  /// base field is an array, it will create a class with a single array in it.
   /// [ignoreBase] ignores the base class, parsing all member classes.
   ClassGenerator(
       {@required this.json,
       String className,
       this.childrenRequireAggregation = false,
+      this.forceBaseClasses = false,
       this.ignoreBase = false,
       String Function(String code) formatOutput,
       this.extraGenerators = const [],
@@ -91,7 +94,7 @@ class ClassGenerator {
       });
     }
 
-    classVisitor(className, mutatedJson, true);
+    classVisitor(className, mutatedJson, base: true);
 
     print('Created classes: ${classes.keys}\n\n');
 
@@ -111,8 +114,10 @@ class ClassGenerator {
   /// [json] content. [base] should only be [true] for the first class created.
   /// If both that and [ignoreBase] is [true], the class is not printed, however
   /// member classes are.
+  /// The [extraFields] is for a manual addition of fields to the class, in the
+  /// case of something like adding a manual Array of a custom type.
   void classVisitor(String name, Map<String, dynamic> json,
-      [bool base = false]) {
+      {bool base = false, List<ElementInfo> extraFields = const []}) {
     var context = ClassContext(pascal(name));
     var comment = commentGenerator?.call(context);
     if (comment != null) {
@@ -126,10 +131,12 @@ class ClassGenerator {
     var res = StringBuffer(comment ?? '');
     res.writeln('\nclass ${context.name} {');
 
-    var fields = <ElementInfo>[];
+    var fields = extraFields.toList();
     for (var entry in json.entries) {
       fields.add(ElementInfo.fromElement(this,
-          singleElement: entry.value, jsonName: entry.key));
+          forceSeparateArrays: base && forceBaseClasses,
+          singleElement: entry.value,
+          jsonName: entry.key));
     }
 
     [
@@ -145,7 +152,7 @@ class ClassGenerator {
 
     res.writeln('}');
 
-    if (!(base && ignoreBase)) {
+    if (!base || !(base && ignoreBase)) {
       classes[name] = res.toString();
     }
   }
@@ -209,18 +216,25 @@ class ElementInfo {
   /// [allElements] is all elements in the case of the type being a List.
   /// This is because if the type is an [ElementType.Object], the data is
   /// aggregated and the object is created.
+  /// If [forceSeparateArrays] is true, it will force arrays to become their own
+  /// classes.
+  /// If [singleElement] is unset, [forceType] must be set.
   factory ElementInfo.fromElement(ClassGenerator classGenerator,
       {dynamic singleElement,
       List listElement = const [],
       String jsonName = '',
-      int depth = 0}) {
+      bool forceSeparateArrays = false,
+      int depth = 0,
+      ElementType forceType}) {
     if (listElement.isEmpty) {
       listElement = [singleElement, ...listElement];
     }
 
     var element = listElement.first;
 
-    var type = ElementType.getType(element);
+    listElement.removeWhere((e) => e == null);
+
+    var type = ElementType.getType(element) ?? forceType;
 
     if (type == ElementType.Object) {
       if (classGenerator.createNewClass(jsonName)) {
@@ -234,9 +248,51 @@ class ElementInfo {
     }
 
     if (type == ElementType.Array) {
+      var creatingName = jsonName;
+
+      if (element == null) {
+        throw 'element must not be null when dealing with arrays';
+      }
+
+      var arrayType = getArrayType(classGenerator, creatingName, element);
+
+      if (forceSeparateArrays) {
+        // Create the outer containing class
+        var containingTypeName =
+            classGenerator.createClassName(jsonName, depth);
+
+        // The name of the class being created
+        creatingName = classGenerator.createClassName('Array_$jsonName', depth);
+
+        print('Creating: $creatingName');
+
+        // If the array's type is an Object, create the inner object
+        if (arrayType.type == ElementType.Object) {
+          var typeName = classGenerator.createClassName(jsonName, depth);
+          classGenerator.classVisitor(creatingName, aggregate(listElement));
+
+          classGenerator.classVisitor(typeName, {}, extraFields: [
+            // ElementInfo(ElementType.Object, jsonName: arrayType.jsonName, objectName: typeName)
+            ElementInfo(ElementType.Array,
+                jsonName: jsonName,
+                arrayInfo: ElementInfo(ElementType.Object, jsonName: creatingName, objectName: creatingName)),
+          ]);
+        } else {
+          // If it's a normal array, simply make the class with an array
+          classGenerator.classVisitor(containingTypeName,
+              <String, dynamic>{jsonName: <Map<String, dynamic>>[]});
+
+          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
+            ElementInfo.fromElement(classGenerator,
+                singleElement: singleElement.first, jsonName: jsonName),
+          ]);
+        }
+      }
+
+      var typeName = classGenerator.createClassName(creatingName, depth,
+          respectOverflow: false);
       return ElementInfo(type,
-          jsonName: jsonName,
-          arrayInfo: getArrayType(classGenerator, jsonName, element));
+          jsonName: creatingName, objectName: typeName, arrayInfo: arrayType);
     }
 
     return ElementInfo(type, jsonName: jsonName);
@@ -418,8 +474,9 @@ class ElementType {
   bool test(dynamic value) => _typeTest(value);
 
   /// Gets the first matching [ElementType] for the given [value].
-  static ElementType getType(dynamic value) =>
-      Precedence.firstWhere((element) => element.test(value));
+  static ElementType getType(dynamic value) => value == null
+      ? null
+      : Precedence.firstWhere((element) => element.test(value));
 
   @override
   core.String toString() => 'ElementType{name: $name}';

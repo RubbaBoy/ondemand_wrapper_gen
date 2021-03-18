@@ -43,6 +43,8 @@ void generate(Map<String, List<Entry>> allData, String name, String url) {
   var method = allData[url].first.request.method;
   var gen = ClassGenerator(
       childrenRequireAggregation: true,
+      forceBaseClasses: true,
+      ignoreBase: true,
       json: aggregated,
       staticNameTransformer: {
         'Requests': 'Request',

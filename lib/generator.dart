@@ -264,22 +264,18 @@ class ElementInfo {
         // The name of the class being created
         creatingName = classGenerator.createClassName('Array_$jsonName', depth);
 
-        print('Creating: $creatingName');
-
         // If the array's type is an Object, create the inner object
         if (arrayType.type == ElementType.Object) {
-          var typeName = classGenerator.createClassName(jsonName, depth);
-          classGenerator.classVisitor(creatingName, aggregate(listElement));
+          classGenerator.classVisitor(creatingName, aggregate(listElement.first));
 
-          classGenerator.classVisitor(typeName, {}, extraFields: [
-            // ElementInfo(ElementType.Object, jsonName: arrayType.jsonName, objectName: typeName)
+          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
             ElementInfo(ElementType.Array,
                 jsonName: jsonName,
                 arrayInfo: ElementInfo(ElementType.Object, jsonName: creatingName, objectName: creatingName)),
           ]);
         } else {
           // If it's a normal array, simply make the class with an array
-          classGenerator.classVisitor(containingTypeName,
+          classGenerator.classVisitor(creatingName,
               <String, dynamic>{jsonName: <Map<String, dynamic>>[]});
 
           classGenerator.classVisitor(containingTypeName, {}, extraFields: [

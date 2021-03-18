@@ -40,6 +40,9 @@ class ClassGenerator {
   /// [true] by default.
   final bool shareClasses;
 
+  /// If [true], all generated fields will be final.
+  final bool finalizeFields;
+
   /// Name, Content
   var classes = <String, String>{};
 
@@ -54,6 +57,7 @@ class ClassGenerator {
   /// [forceBaseClasses] forces all base fields to be classes. Primarily, if a
   /// base field is an array, it will create a class with a single array in it.
   /// [ignoreBase] ignores the base class, parsing all member classes.
+  /// [finalizeFields] sets if all generated fields should be final.
   ClassGenerator(
       {@required this.json,
       String className,
@@ -63,6 +67,7 @@ class ClassGenerator {
       String Function(String code) formatOutput,
       this.extraGenerators = const [],
       this.shareClasses = true,
+        this.finalizeFields = true,
       this.commentGenerator,
       this.nameTransformer,
       Map<String, String> staticNameTransformer})
@@ -96,7 +101,7 @@ class ClassGenerator {
 
     classVisitor(className, mutatedJson, base: true);
 
-    print('Created classes: ${classes.keys}\n\n');
+    print('Created classes: ${classes.keys.join(', ')}\n\n');
 
     classes.values.forEach(string.writeln);
 
@@ -140,7 +145,7 @@ class ClassGenerator {
     }
 
     [
-      fieldGenerator,
+      (buffer, context, fields) => fieldGenerator(buffer, context, fields, finalizeFields),
       constructorGenerator,
       fromJson,
       toJson,
@@ -161,7 +166,7 @@ class ClassGenerator {
   /// If it would create a duplicate name, if [shareClasses] is true, it will
   /// simply return `null` and no class should be created.
   bool createNewClass(String jsonName) {
-    if (className.contains(jsonName) && shareClasses) {
+    if (classes.containsKey(jsonName) && shareClasses) {
       return false;
     }
 
@@ -171,13 +176,9 @@ class ClassGenerator {
   /// Creates a Dart class name in PascalCase from the given JSON field name.
   /// Ignores [sharedClasses]. If [respectDuplicates] is true and it would be a
   /// duplicate, it will append the incrementing number of clashes it has has.
-  String createClassName(String jsonName, int depth,
-      {bool respectOverflow = true}) {
+  String createClassName(String jsonName, {bool respectOverflow = true}) {
     var name = pascal(jsonName);
-    if (depth > 0) {
-      name = '$name\$$depth';
-    }
-    if (className.contains(jsonName) && respectOverflow) {
+    if (classes.containsKey(jsonName) && respectOverflow) {
       clashes.putIfAbsent(name, () => 0);
       name = '$name${++clashes[name]}';
     }
@@ -224,74 +225,80 @@ class ElementInfo {
       List listElement = const [],
       String jsonName = '',
       bool forceSeparateArrays = false,
-      int depth = 0,
       ElementType forceType}) {
-    if (listElement.isEmpty) {
-      listElement = [singleElement, ...listElement];
-    }
-
-    var element = listElement.first;
-
-    listElement.removeWhere((e) => e == null);
-
-    var type = ElementType.getType(element) ?? forceType;
-
-    if (type == ElementType.Object) {
-      if (classGenerator.createNewClass(jsonName)) {
-        var typeName = classGenerator.createClassName(jsonName, depth);
-        classGenerator.classVisitor(typeName, aggregate(listElement));
+    try {
+      if (listElement.isEmpty) {
+        listElement = [singleElement, ...listElement];
       }
 
-      var typeName = classGenerator.createClassName(jsonName, depth,
-          respectOverflow: false);
-      return ElementInfo(type, jsonName: jsonName, objectName: typeName);
-    }
+      var element = listElement.first;
 
-    if (type == ElementType.Array) {
-      var creatingName = jsonName;
+      listElement.removeWhere((e) => e == null);
 
-      if (element == null) {
-        throw 'element must not be null when dealing with arrays';
-      }
+      var type = ElementType.getType(element) ?? forceType;
 
-      var arrayType = getArrayType(classGenerator, creatingName, element);
-
-      if (forceSeparateArrays) {
-        // Create the outer containing class
-        var containingTypeName =
-            classGenerator.createClassName(jsonName, depth);
-
-        // The name of the class being created
-        creatingName = classGenerator.createClassName('Array_$jsonName', depth);
-
-        // If the array's type is an Object, create the inner object
-        if (arrayType.type == ElementType.Object) {
-          classGenerator.classVisitor(creatingName, aggregate(listElement.first));
-
-          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
-            ElementInfo(ElementType.Array,
-                jsonName: jsonName,
-                arrayInfo: ElementInfo(ElementType.Object, jsonName: creatingName, objectName: creatingName)),
-          ]);
-        } else {
-          // If it's a normal array, simply make the class with an array
-          classGenerator.classVisitor(creatingName,
-              <String, dynamic>{jsonName: <Map<String, dynamic>>[]});
-
-          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
-            ElementInfo.fromElement(classGenerator,
-                singleElement: singleElement.first, jsonName: jsonName),
-          ]);
+      if (type == ElementType.Object) {
+        if (classGenerator.createNewClass(jsonName)) {
+          var typeName = classGenerator.createClassName(jsonName);
+          classGenerator.classVisitor(typeName, aggregate(listElement));
         }
+
+        var typeName =
+            classGenerator.createClassName(jsonName, respectOverflow: false);
+        return ElementInfo(type, jsonName: jsonName, objectName: typeName);
       }
 
-      var typeName = classGenerator.createClassName(creatingName, depth,
-          respectOverflow: false);
-      return ElementInfo(type,
-          jsonName: creatingName, objectName: typeName, arrayInfo: arrayType);
-    }
+      if (type == ElementType.Array) {
+        var creatingName = jsonName;
 
-    return ElementInfo(type, jsonName: jsonName);
+        if (element == null) {
+          throw 'element must not be null when dealing with arrays';
+        }
+
+        var arrayType = getArrayType(classGenerator, creatingName, element);
+
+        if (forceSeparateArrays) {
+          // Create the outer containing class
+          var containingTypeName = classGenerator.createClassName(jsonName);
+
+          // The name of the class being created
+          creatingName = classGenerator.createClassName('Array_$jsonName');
+
+          // If the array's type is an Object, create the inner object
+          if (arrayType.type == ElementType.Object) {
+            classGenerator.classVisitor(
+                creatingName, aggregate(listElement.first));
+
+            classGenerator.classVisitor(containingTypeName, {}, extraFields: [
+              ElementInfo(ElementType.Array,
+                  jsonName: jsonName,
+                  arrayInfo: ElementInfo(ElementType.Object,
+                      jsonName: creatingName, objectName: creatingName)),
+            ]);
+          } else {
+            // If it's a normal array, simply make the class with an array
+            classGenerator.classVisitor(creatingName,
+                <String, dynamic>{jsonName: <Map<String, dynamic>>[]});
+
+            classGenerator.classVisitor(containingTypeName, {}, extraFields: [
+              ElementInfo.fromElement(classGenerator,
+                  singleElement: singleElement.first, jsonName: jsonName),
+            ]);
+          }
+        }
+
+        var typeName = classGenerator.createClassName(creatingName,
+            respectOverflow: false);
+        return ElementInfo(type,
+            jsonName: creatingName, objectName: typeName, arrayInfo: arrayType);
+      }
+
+      return ElementInfo(type, jsonName: jsonName);
+    } catch (e, s) {
+      print(e);
+      print(s);
+      return null;
+    }
   }
 
   /// Gets the [ElementType] of the children of a given JSON array (In the form

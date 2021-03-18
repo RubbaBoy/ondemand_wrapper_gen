@@ -3,9 +3,13 @@ import 'package:ondemand_wrapper_gen/generator.dart';
 import 'extensions.dart';
 
 void fieldGenerator(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, bool finalizeFields) {
   for (var info in fields) {
     var type = info.type;
+    if (finalizeFields) {
+      buffer.write('final ');
+    }
+
     buffer.writeln(type.generate(info));
   }
 }

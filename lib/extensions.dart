@@ -7,3 +7,10 @@ extension MapUtility<K, V> on Map<K, V> {
     forEach((k, v) => action(i++, k, v));
   }
 }
+
+extension ListUtility<E> on List<E> {
+  void forEachI(void Function(int index, E element) action) {
+    var i = 0;
+    forEach((e) => action(i++, e));
+  }
+}

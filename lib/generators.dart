@@ -2,48 +2,47 @@ import 'package:ondemand_wrapper_gen/generator.dart';
 
 import 'extensions.dart';
 
-void fieldGenerator(StringBuffer buffer, ClassContext context, Map<String, ElementInfo> fields) {
-  for (var name in fields.keys) {
-    var info = fields[name];
+void fieldGenerator(StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
+  for (var info in fields) {
     var type = info.type;
-    buffer.writeln(type.generate(name, info));
+    buffer.writeln(type.generate(info));
   }
 }
 
 void constructorGenerator(
-    StringBuffer buffer, ClassContext context, Map<String, ElementInfo> fields) {
-  buffer.write('${context.name}(');
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
+  buffer.write('${context.name}({');
 
-  fields.forEachI((index, name, info) {
+  fields.forEachI((index, info) {
     if (index != 0) {
       buffer.write(', ');
     }
-    buffer.write('this.$name');
+    buffer.write('this.${info.dartName}');
   });
 
-  buffer.writeln(');');
+  buffer.writeln('});');
 }
 
 void fromJson(
-    StringBuffer buffer, ClassContext context, Map<String, ElementInfo> fields) {
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
   buffer.writeln('${context.name}.fromJson(Map<String, dynamic> json) :');
-  fields.forEachI((index, name, info) {
+  fields.forEachI((index, info) {
     if (index != 0) {
       buffer.write(',\n');
     }
-    buffer.write(info.type.generateFromJson(name, info));
+    buffer.write(info.type.generateFromJson(info));
   });
   buffer.writeln(';');
 }
 
 void toJson(
-    StringBuffer buffer, ClassContext context, Map<String, ElementInfo> fields) {
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
   buffer.writeln('Map<String, dynamic> toJson() => {');
-  fields.forEachI((index, name, info) {
+  fields.forEachI((index, info) {
     if (index != 0) {
       buffer.write(',\n');
     }
-    buffer.write(info.type.generateToJson(name, info));
+    buffer.write(info.type.generateToJson(info));
   });
   buffer.writeln('};');
 }

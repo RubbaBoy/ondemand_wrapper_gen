@@ -22,6 +22,12 @@ void main(List<String> args) {
         [4, 5, 6],
         [7, 8, 9]
     ],
+    "outer2": [
+        {
+            "huh": "bruh",
+            "huh22": "bruh22"
+        }
+    ],
     "more": [
         [
             {"ok": "and"},

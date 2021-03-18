@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:core';
 import 'dart:core' as core;
 
@@ -5,14 +6,6 @@ import 'package:dart_style/dart_style.dart';
 import 'package:meta/meta.dart';
 import 'package:ondemand_wrapper_gen/generators.dart';
 import 'package:recase/recase.dart';
-
-// /// Used for generating simple code using the Dart name and extra [ElementInfo].
-// typedef GenerateJsonSidedCode = String Function(
-//     String jsonName, String dartName, ElementInfo info);
-//
-// /// Used for generating code using the JSON name, Dart name, and extra
-// /// [ElementInfo].
-// typedef GenerateSimpleCode = String Function(String dartName, ElementInfo info);
 
 /// Used for generating blocks of code, such as fields, methods, constructors,
 /// etc... using field data.
@@ -161,7 +154,8 @@ class ElementInfo {
 
     if (type == ElementType.Array) {
       return ElementInfo(type,
-          jsonName: jsonName, arrayInfo: getArrayType(classGenerator, jsonName, element));
+          jsonName: jsonName,
+          arrayInfo: getArrayType(classGenerator, jsonName, element));
     }
 
     return ElementInfo(type, jsonName: jsonName);
@@ -177,7 +171,8 @@ class ElementInfo {
   /// of a [List]). If there is mismatched types (e.g. number with strings,
   /// numbers with objects, etc.) [ElementType.Mixed] is returned. If the array
   /// is empty, [ElementType.Unknown] is returned.
-  static ElementInfo getArrayType(ClassGenerator classGenerator, String jsonName, List list) {
+  static ElementInfo getArrayType(
+      ClassGenerator classGenerator, String jsonName, List list) {
     var types = list.map((e) => e.runtimeType).toSet();
 
     if (types.isEmpty) {
@@ -185,7 +180,8 @@ class ElementInfo {
     }
 
     if (types.length == 1) {
-      return ElementInfo.fromElement(classGenerator, jsonName: jsonName, listElement: list);
+      return ElementInfo.fromElement(classGenerator,
+          jsonName: jsonName, listElement: list);
     }
 
     return ElementInfo(ElementType.Mixed);
@@ -205,25 +201,54 @@ class ElementType {
 
   static final Boolean = ElementType._('Boolean', type: bool);
 
-  static final Array = ElementType._('Array',
+  static final Array = ElementType._('Array', primitive: false,
       valueTest: (e) => e is List,
       generateTypeString: GenerateSimpleCode((dartName, info) =>
-          'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'));
+          'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
+      generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+        var arrayType = info.arrayInfo.type;
+        if (arrayType.primitive || (arrayType == ElementType.Array && !containsYuckyChild(info.arrayInfo))) {
+          return '\$';
+        }
+
+        var e = generateTempVar('e', depth);
+        return '\$.map(($e) => ${arrayType.generateToJson(info.arrayInfo).replaceAll('\$', e)}).toList()';
+      }),
+      generateFromJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+        var arrayType = info.arrayInfo.type;
+        if (arrayType.primitive) {
+          if (arrayType == ElementType.Mixed || arrayType == ElementType.Unknown) {
+            return '\$';
+          }
+
+          var listDef = depth > 0 ? '(\$ as List)' : '\$';
+          return '$listDef.cast<${arrayType.generateTypeString(info)}>()';
+        }
+
+        var e = generateTempVar('e', depth);
+        return '(\$ as List).map(($e) => ${arrayType.generateFromJson(info.arrayInfo, depth + 1).replaceAll('\$', e)}).toList()';
+      }));
 
   /// This is a placeholder for new classes being created
-  static final Object = ElementType._('Object',
+  static final Object = ElementType._('Object', primitive: false,
       valueTest: (v) => v is Map,
       generateTypeString:
-          GenerateSimpleCode((dartName, info) => info.objectName));
+          GenerateSimpleCode((dartName, info) => info.objectName),
+      generateToJson: GenerateJsonSidedCode(
+          (jsonName, dartName, info, _) => '\$.toJson()'),
+      generateFromJson: GenerateJsonSidedCode(
+          (jsonName, dartName, info, _) => '${info.objectName}.fromJson(\$)'));
 
   /// Used for objects with no defined type, i.e. empty arrays' types.
   static final Unknown =
-      ElementType._('Unknown', valueTest: (_) => true, typeString: 'Null');
+      ElementType._('Unknown', primitive: true, valueTest: (_) => true, typeString: 'Null',
+      generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, _) => 'null'),
+      generateFromJson: GenerateJsonSidedCode((jsonName, dartName, info, _) => 'null'));
 
   /// Used for Arrays with mixed child types. This has no precedence as it
   /// should only be manually set.
   static final Mixed =
-      ElementType._('Mixed', valueTest: (_) => false, typeString: 'dynamic');
+      ElementType._('Mixed', primitive: true, valueTest: (_) => false, typeString: 'dynamic');
 
   /// Sets the order of how the [ElementTypes] are checked, from most specific
   /// to least.
@@ -238,6 +263,7 @@ class ElementType {
   ];
 
   final core.String name;
+  final bool primitive;
   final bool Function(dynamic value) _typeTest;
 
   /// Generates the [core.String] written to Dart files as the type, such as
@@ -250,23 +276,26 @@ class ElementType {
   /// ```
   GenerateSimpleCode generate;
 
-  /// Generates code to convert the variable to JSON. There will always be a
-  /// variable named `json` in the scope with the type of `Map<String, dynamic>`
-  /// e.g. for converting a string `foo` to JSON:
+  /// Generates code to convert the variable to JSON, to proceed the name in a
+  /// map, such as `'foo': ` The character `$` will be replaced with the Dart
+  /// variable instance. e.g. for converting an object to JSON:
   /// ```
-  /// 'foo': foo
+  /// $.toJson()
   /// ```
   GenerateJsonSidedCode generateToJson;
 
-  /// Generates code to get the variable from JSON. There will always be a
-  /// variable named `json` in the scope with the type of `Map<String, dynamic>`
-  /// e.g. for creating a variable `foo` from JSON:
+  /// Generates code to get the variable from JSON, to proceed the variable
+  /// assignment, such as `foo = ` The character `$` will always be replaced
+  /// with a variable in the scope with the type of `Map<String, dynamic>` e.g.
+  /// for creating a variable `foo` from JSON (Assuming fromJson accepted a
+  /// `Map<String, dynamic>`).
   /// ```
-  /// foo = json['foo']
+  /// Foo.fromJson($)
   /// ```
   GenerateJsonSidedCode generateFromJson;
 
-  /// Creates a [ElementType] with a given [name]. Either [valueTest] or [type]
+  /// Creates a [ElementType] with a given [name]. If the type is primitive to
+  /// JSON, [primitive] should be [true]. Either [valueTest] or [type]
   /// must be specified. Setting [type] is the same as setting [valueTest] to
   /// ```
   /// (value) => value is type
@@ -287,7 +316,8 @@ class ElementType {
   /// name = json['name']
   /// ```
   ElementType._(this.name,
-      {bool Function(dynamic value) valueTest,
+      {this.primitive = true,
+        bool Function(dynamic value) valueTest,
       Type type,
       core.String typeString,
       this.generateTypeString,
@@ -299,10 +329,10 @@ class ElementType {
         (dartName, info) => '${generateTypeString(info)} $dartName;');
     generateTypeString ??=
         GenerateSimpleCode((dartName, _) => typeString ?? type?.toString());
-    generateToJson ??= GenerateJsonSidedCode(
-        (jsonName, dartName, info) => "'$jsonName': $dartName");
-    generateFromJson ??= GenerateJsonSidedCode(
-        (jsonName, dartName, info) => "$dartName = json['$jsonName']");
+    generateToJson ??=
+        GenerateJsonSidedCode((jsonName, dartName, info, _) => dartName);
+    generateFromJson ??=
+        GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$');
   }
 
   /// Performs a test to check if the [value] is of the current type.
@@ -317,13 +347,16 @@ class ElementType {
 }
 
 /// Used for generating simple code using the Dart name and extra [ElementInfo].
+/// The [depth] is how many layers deep the generation is. If it is called once,
+/// [depth] is 0. If it's called again from within the generation, it should be
+/// 1, etc.
 class GenerateJsonSidedCode {
-  final String Function(String jsonName, String dartName, ElementInfo info)
+  final String Function(String jsonName, String dartName, ElementInfo info, int depth)
       generate;
 
   GenerateJsonSidedCode(this.generate);
 
-  String call(ElementInfo info) => generate(info.jsonName, info.dartName, info);
+  String call(ElementInfo info, [int depth = 0]) => generate(info.jsonName, info.dartName, info, depth);
 }
 
 /// Used for generating code using the JSON name, Dart name, and extra
@@ -334,6 +367,31 @@ class GenerateSimpleCode {
   GenerateSimpleCode(this.generate);
 
   String call(ElementInfo info) => generate(info.dartName, info);
+}
+
+/// Checks if the given array's [ElementInfo] arrayInfo contains any
+/// non-primitive or non-list types, recursively.
+bool containsYuckyChild(ElementInfo arrayInfo) {
+  var type = arrayInfo.type;
+  if (!type.primitive && type != ElementType.Array) {
+    return true;
+  }
+
+  if (type == ElementType.Array) {
+    return containsYuckyChild(arrayInfo.arrayInfo);
+  }
+
+  return false;
+}
+
+/// Generated a temporary variable, starting with prefix [name] and ending with
+/// the given [depth] if above 0.
+String generateTempVar(String name, int depth) {
+  if (depth == 0) {
+    return name;
+  }
+
+  return '$name$depth';
 }
 
 /// Formats a string into camelCase

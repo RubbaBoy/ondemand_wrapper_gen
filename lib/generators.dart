@@ -2,7 +2,8 @@ import 'package:ondemand_wrapper_gen/generator.dart';
 
 import 'extensions.dart';
 
-void fieldGenerator(StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
+void fieldGenerator(
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
   for (var info in fields) {
     var type = info.type;
     buffer.writeln(type.generate(info));
@@ -30,7 +31,8 @@ void fromJson(
     if (index != 0) {
       buffer.write(',\n');
     }
-    buffer.write(info.type.generateFromJson(info));
+    buffer.write(
+        '${info.dartName} = ${info.type.generateFromJson(info).replaceAll('\$', "json['${info.jsonName}']")}');
   });
   buffer.writeln(';');
 }
@@ -42,7 +44,7 @@ void toJson(
     if (index != 0) {
       buffer.write(',\n');
     }
-    buffer.write(info.type.generateToJson(info));
+    buffer.write("'${info.jsonName}': ${info.type.generateToJson(info).replaceAll('\$', info.dartName)}");
   });
   buffer.writeln('};');
 }

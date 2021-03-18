@@ -12,6 +12,10 @@ void fieldGenerator(
 
 void constructorGenerator(
     StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
+  if (fields.isEmpty) {
+    return;
+  }
+
   buffer.write('${context.name}({');
 
   fields.forEachI((index, info) {
@@ -26,7 +30,14 @@ void constructorGenerator(
 
 void fromJson(
     StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
-  buffer.writeln('${context.name}.fromJson(Map<String, dynamic> json) :');
+  buffer.write('${context.name}.fromJson(Map<String, dynamic> json)');
+
+  if (fields.isEmpty) {
+    buffer.writeln(';');
+    return;
+  }
+
+  buffer.writeln(' :');
   fields.forEachI((index, info) {
     if (index != 0) {
       buffer.write(',\n');

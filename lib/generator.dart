@@ -1,4 +1,4 @@
-import 'dart:collection';
+import 'dart:convert';
 import 'dart:core';
 import 'dart:core' as core;
 
@@ -12,14 +12,27 @@ import 'package:recase/recase.dart';
 typedef BlockGenerator = void Function(
     StringBuffer buffer, ClassContext context, List<ElementInfo> fields);
 
+/// Generates a block comment at the beginning of a generated class with a
+/// given [context].
+typedef BlockCommentGenerator = String Function(ClassContext context);
+
+/// Transform a class name
+typedef NameTransformer = String Function(String name);
+
 final _formatter = DartFormatter();
 
 /// Generates a Dart class string based on browsing a class tree.
 class ClassGenerator {
   final String Function(String) formatOutput;
-  final String className;
+  String className;
   final Map<String, dynamic> json;
+  final bool ignoreBase;
+  final bool childrenRequireAggregation;
   final List<BlockGenerator> extraGenerators;
+  final BlockCommentGenerator commentGenerator;
+
+  /// Allows the mutation of class names.
+  NameTransformer nameTransformer;
 
   /// If [true], classes will be shared among field names. If [false], unique
   /// classes will be created no matter the field repetition.
@@ -33,18 +46,52 @@ class ClassGenerator {
   /// The amount of clashes for a class name
   var clashes = <String, int>{};
 
-  ClassGenerator({
-    @required this.className,
-    @required this.json,
-    String Function(String code) formatOutput,
-    this.extraGenerators = const [],
-    this.shareClasses = true,
-  }) : formatOutput = formatOutput ?? _formatter.format;
+  /// The [statusNameTransformer] overrides the [nameTransformer], replacing the
+  /// key names with the values.
+  /// [childrenRequireAggregation] must be set to true if the input is in the
+  /// form of members with arrays of multiple responses. This simply invokes
+  /// [aggregateMultiple] on each field of the input JSON before conversion.
+  /// [ignoreBase] ignores the base class, parsing all member classes.
+  ClassGenerator(
+      {@required this.json,
+      String className,
+      this.childrenRequireAggregation = false,
+      this.ignoreBase = false,
+      String Function(String code) formatOutput,
+      this.extraGenerators = const [],
+      this.shareClasses = true,
+      this.commentGenerator,
+      this.nameTransformer,
+      Map<String, String> staticNameTransformer})
+      : formatOutput = formatOutput ?? _formatter.format {
+    this.className = className ?? 'Clazz$hashCode';
+    if (staticNameTransformer != null) {
+      nameTransformer = (name) => staticNameTransformer[name] ?? name;
+    }
+  }
 
   String generated() {
     var string = StringBuffer();
 
-    classVisitor(className, json);
+    var mutatedJson = json;
+    if (childrenRequireAggregation) {
+      mutatedJson = json.map((key, value) {
+        var redone = value;
+        if (!(value is List)) {
+          throw 'All member should be lists!';
+        }
+        var list = value as List;
+        var first = list.isNotEmpty ? list.first : null;
+        if (first is Map) {
+          redone = aggregate(list);
+        } else if (first is List) {
+          redone = doubleAggregateList(list);
+        }
+        return MapEntry(key, redone);
+      });
+    }
+
+    classVisitor(className, mutatedJson, true);
 
     print('Created classes: ${classes.keys}\n\n');
 
@@ -60,9 +107,24 @@ class ClassGenerator {
     return out;
   }
 
-  void classVisitor(String name, Map<String, dynamic> json) {
+  /// Creates classes and adds them into [classes] with the given [name] and
+  /// [json] content. [base] should only be [true] for the first class created.
+  /// If both that and [ignoreBase] is [true], the class is not printed, however
+  /// member classes are.
+  void classVisitor(String name, Map<String, dynamic> json,
+      [bool base = false]) {
     var context = ClassContext(pascal(name));
-    var res = StringBuffer('class ${context.name} {');
+    var comment = commentGenerator?.call(context);
+    if (comment != null) {
+      comment = comment
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .map((e) => '/// $e')
+          .join('\n');
+    }
+    var res = StringBuffer(comment ?? '');
+    res.writeln('\nclass ${context.name} {');
 
     var fields = <ElementInfo>[];
     for (var entry in json.entries) {
@@ -82,25 +144,38 @@ class ClassGenerator {
     });
 
     res.writeln('}');
-    classes[name] = res.toString();
+
+    if (!(base && ignoreBase)) {
+      classes[name] = res.toString();
+    }
+  }
+
+  /// Returns if a new class should be created.
+  /// If it would create a duplicate name, if [shareClasses] is true, it will
+  /// simply return `null` and no class should be created.
+  bool createNewClass(String jsonName) {
+    if (className.contains(jsonName) && shareClasses) {
+      return false;
+    }
+
+    return true;
   }
 
   /// Creates a Dart class name in PascalCase from the given JSON field name.
-  /// If it would create a duplicate name, if [shareClasses] is true, it will
-  /// simply return `null` and no class should be created. If false, it will
-  /// append the incrementing number of clashes it has has.
-  String createClassName(String jsonName) {
+  /// Ignores [sharedClasses]. If [respectDuplicates] is true and it would be a
+  /// duplicate, it will append the incrementing number of clashes it has has.
+  String createClassName(String jsonName, int depth,
+      {bool respectOverflow = true}) {
     var name = pascal(jsonName);
-    if (className.contains(jsonName)) {
-      if (shareClasses) {
-        return null;
-      }
-
+    if (depth > 0) {
+      name = '$name\$$depth';
+    }
+    if (className.contains(jsonName) && respectOverflow) {
       clashes.putIfAbsent(name, () => 0);
       name = '$name${++clashes[name]}';
     }
 
-    return name;
+    return nameTransformer?.call(name) ?? name;
   }
 }
 
@@ -137,7 +212,8 @@ class ElementInfo {
   factory ElementInfo.fromElement(ClassGenerator classGenerator,
       {dynamic singleElement,
       List listElement = const [],
-      String jsonName = ''}) {
+      String jsonName = '',
+      int depth = 0}) {
     if (listElement.isEmpty) {
       listElement = [singleElement, ...listElement];
     }
@@ -147,8 +223,13 @@ class ElementInfo {
     var type = ElementType.getType(element);
 
     if (type == ElementType.Object) {
-      var typeName = classGenerator.createClassName(jsonName);
-      classGenerator.classVisitor(typeName, aggregate(listElement));
+      if (classGenerator.createNewClass(jsonName)) {
+        var typeName = classGenerator.createClassName(jsonName, depth);
+        classGenerator.classVisitor(typeName, aggregate(listElement));
+      }
+
+      var typeName = classGenerator.createClassName(jsonName, depth,
+          respectOverflow: false);
       return ElementInfo(type, jsonName: jsonName, objectName: typeName);
     }
 
@@ -160,12 +241,6 @@ class ElementInfo {
 
     return ElementInfo(type, jsonName: jsonName);
   }
-
-  /// Takes in an uncasted [List<Map<String, dynamic>>] [data], and aggregates all
-  /// children of the list to a single [Map<String, dynamic>]
-  static Map<String, dynamic> aggregate(List<dynamic> data) =>
-      data.cast<Map<String, dynamic>>().fold(<String, dynamic>{},
-          (previousValue, element) => {...previousValue, ...element});
 
   /// Gets the [ElementType] of the children of a given JSON array (In the form
   /// of a [List]). If there is mismatched types (e.g. number with strings,
@@ -201,23 +276,28 @@ class ElementType {
 
   static final Boolean = ElementType._('Boolean', type: bool);
 
-  static final Array = ElementType._('Array', primitive: false,
+  static final Array = ElementType._('Array',
+      primitive: false,
       valueTest: (e) => e is List,
       generateTypeString: GenerateSimpleCode((dartName, info) =>
           'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
       generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
         var arrayType = info.arrayInfo.type;
-        if (arrayType.primitive || (arrayType == ElementType.Array && !containsYuckyChild(info.arrayInfo))) {
+        if (arrayType.primitive ||
+            (arrayType == ElementType.Array &&
+                !containsYuckyChild(info.arrayInfo))) {
           return '\$';
         }
 
         var e = generateTempVar('e', depth);
         return '\$.map(($e) => ${arrayType.generateToJson(info.arrayInfo).replaceAll('\$', e)}).toList()';
       }),
-      generateFromJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+      generateFromJson:
+          GenerateJsonSidedCode((jsonName, dartName, info, depth) {
         var arrayType = info.arrayInfo.type;
         if (arrayType.primitive) {
-          if (arrayType == ElementType.Mixed || arrayType == ElementType.Unknown) {
+          if (arrayType == ElementType.Mixed ||
+              arrayType == ElementType.Unknown) {
             return '\$';
           }
 
@@ -230,25 +310,24 @@ class ElementType {
       }));
 
   /// This is a placeholder for new classes being created
-  static final Object = ElementType._('Object', primitive: false,
+  static final Object = ElementType._('Object',
+      primitive: false,
       valueTest: (v) => v is Map,
       generateTypeString:
           GenerateSimpleCode((dartName, info) => info.objectName),
-      generateToJson: GenerateJsonSidedCode(
-          (jsonName, dartName, info, _) => '\$.toJson()'),
+      generateToJson:
+          GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$.toJson()'),
       generateFromJson: GenerateJsonSidedCode(
           (jsonName, dartName, info, _) => '${info.objectName}.fromJson(\$)'));
 
   /// Used for objects with no defined type, i.e. empty arrays' types.
-  static final Unknown =
-      ElementType._('Unknown', primitive: true, valueTest: (_) => true, typeString: 'Null',
-      generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, _) => 'null'),
-      generateFromJson: GenerateJsonSidedCode((jsonName, dartName, info, _) => 'null'));
+  static final Unknown = ElementType._('Unknown',
+      primitive: true, valueTest: (_) => true, typeString: 'dynamic');
 
   /// Used for Arrays with mixed child types. This has no precedence as it
   /// should only be manually set.
-  static final Mixed =
-      ElementType._('Mixed', primitive: true, valueTest: (_) => false, typeString: 'dynamic');
+  static final Mixed = ElementType._('Mixed',
+      primitive: true, valueTest: (_) => false, typeString: 'dynamic');
 
   /// Sets the order of how the [ElementTypes] are checked, from most specific
   /// to least.
@@ -317,7 +396,7 @@ class ElementType {
   /// ```
   ElementType._(this.name,
       {this.primitive = true,
-        bool Function(dynamic value) valueTest,
+      bool Function(dynamic value) valueTest,
       Type type,
       core.String typeString,
       this.generateTypeString,
@@ -351,12 +430,13 @@ class ElementType {
 /// [depth] is 0. If it's called again from within the generation, it should be
 /// 1, etc.
 class GenerateJsonSidedCode {
-  final String Function(String jsonName, String dartName, ElementInfo info, int depth)
-      generate;
+  final String Function(
+      String jsonName, String dartName, ElementInfo info, int depth) generate;
 
   GenerateJsonSidedCode(this.generate);
 
-  String call(ElementInfo info, [int depth = 0]) => generate(info.jsonName, info.dartName, info, depth);
+  String call(ElementInfo info, [int depth = 0]) =>
+      generate(info.jsonName, info.dartName, info, depth);
 }
 
 /// Used for generating code using the JSON name, Dart name, and extra
@@ -394,8 +474,78 @@ String generateTempVar(String name, int depth) {
   return '$name$depth';
 }
 
+/// Takes in an uncasted [List<Map<String, dynamic>>] [data], and aggregates all
+/// children of the list to a single [Map<String, dynamic>]
+Map<String, dynamic> aggregate(List<dynamic> data) =>
+    data.cast<Map<String, dynamic>>().fold(<String, dynamic>{},
+        (previousValue, element) => {...previousValue, ...element});
+
+/// Aggregates multiple (usually response) objects into one. This only works
+/// with a list inside of a list, combining all inner lists. For example, an
+/// input may be
+/// ```json
+/// {
+///     "responses": [
+///         [
+///             {"id": "id", "name":  "name"}
+///         ],
+///         [
+///             {"id": "id1", "name":  "name1"},
+///             {"id": "id2", "name":  "name2"}
+///         ]
+///     ]
+/// }
+/// ```
+/// And the output would be
+/// ```json
+/// {
+///   "responses": [
+///     {
+///       "id": "id",
+///       "name": "name"
+///     },
+///     {
+///       "id": "id1",
+///       "name": "name1"
+///     },
+///     {
+///       "id": "id2",
+///       "name": "name2"
+///     }
+///   ]
+/// }
+/// ```
+Map<String, dynamic> doubleAggregate(Map map) {
+  return map.map((key, value) => MapEntry(
+      key,
+      value.cast<List>().fold(<dynamic>[], (previous, element) {
+        previous.addAll(element);
+        return previous;
+      })));
+}
+
+List doubleAggregateList(List list) {
+  return list.fold(<dynamic>[], (previous, element) {
+    previous.addAll(element);
+    return previous;
+  });
+}
+
 /// Formats a string into camelCase
-String camel(String string) => ReCase(string).camelCase;
+String camel(String string) => ReCase(makeValid(string)).camelCase;
 
 /// Formats a string into PascalCase
-String pascal(String string) => ReCase(string).pascalCase;
+String pascal(String string) => ReCase(makeValid(string)).pascalCase;
+
+/// Formats a string into snake-case
+String snake(String string) => ReCase(makeValid(string)).snakeCase;
+
+/// Takes in a potentially invalid name and makes it valid for Dart classes
+/// or fields. e.g. if `1` is supplied, `Num1` is returned.
+String makeValid(String name) {
+  if (name.startsWith(RegExp(r'\d'))) {
+    return 'Num$name';
+  }
+
+  return name;
+}

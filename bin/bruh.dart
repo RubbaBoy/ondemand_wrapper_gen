@@ -16,7 +16,18 @@ void main(List<String> args) {
         "inner-too": "anotha"
     },
     "bruh": ["str", 1],
-    "othger": []
+    "othger": [],
+    "lasdt": [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+    ],
+    "more": [
+        [
+            {"ok": "and"},
+            {"bruh": "moment"}
+        ]
+    ]
 }
     ''';
 

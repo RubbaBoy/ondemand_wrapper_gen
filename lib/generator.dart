@@ -3,9 +3,16 @@ import 'dart:core' as core;
 
 import 'package:dart_style/dart_style.dart';
 import 'package:meta/meta.dart';
+import 'package:ondemand_wrapper_gen/generators.dart';
 import 'package:recase/recase.dart';
 
-typedef GenerateElement = String Function(String name, ElementInfo info);
+/// Used for generating a field.
+typedef GenerateSimpleCode = String Function(String name, ElementInfo info);
+
+/// Used for generating blocks of code, such as fields, methods, constructors,
+/// etc... using field data.
+typedef BlockGenerator = void Function(
+    StringBuffer buffer, ClassContext context, Map<String, ElementInfo> fields);
 
 final _formatter = DartFormatter();
 
@@ -14,11 +21,13 @@ class ClassGenerator {
   final String Function(String) formatOutput;
   final String className;
   final Map<String, dynamic> json;
+  final List<BlockGenerator> extraGenerators;
 
   ClassGenerator({
     @required this.className,
     @required this.json,
     String Function(String code) formatOutput,
+    this.extraGenerators = const [],
   }) : formatOutput = formatOutput ?? _formatter.format;
 
   String generated() {
@@ -37,25 +46,35 @@ class ClassGenerator {
   }
 
   String classVisitor(String name, Map<String, dynamic> json) {
-    var res = StringBuffer('class ${pascal(name)} {');
+    var context = ClassContext(pascal(name));
+    var res = StringBuffer('class ${context.name} {');
 
-    var types = <MapEntry<String, dynamic>, ElementInfo>{};
+    var fields = <String, ElementInfo>{};
     for (var entry in json.entries) {
-      var info = ElementInfo.fromElement(entry.value);
-      var type = info.type;
-
-      print('$entry: $info');
-
-      res.writeln(type.generate(entry.key, info));
+      fields[entry.key] = ElementInfo.fromElement(entry.value);
     }
 
-    for (var type in types.keys) {
-      print('$type: ${types[type]}');
-    }
+    [
+      fieldGenerator,
+      constructorGenerator,
+      fromJson,
+      toJson,
+      ...extraGenerators,
+    ].forEach((generator) {
+      generator(res, context, fields);
+      res.writeln();
+    });
 
     res.writeln('}');
     return '$res';
   }
+}
+
+class ClassContext {
+  /// The name of the class.
+  final String name;
+
+  ClassContext(this.name);
 }
 
 class ElementInfo {
@@ -131,8 +150,32 @@ class ElementType {
 
   final core.String name;
   final bool Function(dynamic value) _typeTest;
-  GenerateElement generateTypeString;
-  GenerateElement generate;
+
+  /// Generates the [core.String] written to Dart files as the type, such as
+  /// String, int, bool, etc.
+  GenerateSimpleCode generateTypeString;
+
+  /// Generates the field definition, e.g.
+  /// ```
+  /// bool foo;
+  /// ```
+  GenerateSimpleCode generate;
+
+  /// Generates code to convert the variable to JSON. There will always be a
+  /// variable named `json` in the scope with the type of `Map<String, dynamic>`
+  /// e.g. for converting a string `foo` to JSON:
+  /// ```
+  /// 'foo': foo
+  /// ```
+  GenerateSimpleCode generateToJson;
+
+  /// Generates code to get the variable from JSON. There will always be a
+  /// variable named `json` in the scope with the type of `Map<String, dynamic>`
+  /// e.g. for creating a variable `foo` from JSON:
+  /// ```
+  /// foo = json['foo']
+  /// ```
+  GenerateSimpleCode generateFromJson;
 
   /// Creates a [ElementType] with a given [name]. Either [valueTest] or [type]
   /// must be specified. Setting [type] is the same as setting [valueTest] to
@@ -146,15 +189,27 @@ class ElementType {
   /// ```
   /// typeString name;
   /// ```
+  /// If no [generateToJson] is specified, the default is
+  /// ```
+  /// 'name': name
+  /// ```
+  /// If no [generateFromJson] is specified, the default is
+  /// ```
+  /// name = json['name']
+  /// ```
   ElementType._(this.name,
       {bool Function(dynamic value) valueTest,
       Type type,
       core.String typeString,
       this.generateTypeString,
-      this.generate})
+      this.generate,
+      this.generateToJson,
+      this.generateFromJson})
       : _typeTest = valueTest ?? ((value) => value.runtimeType == type) {
     generate ??= ((name, info) => '${generateTypeString(name, info)} $name;');
     generateTypeString ??= ((name, _) => typeString ?? type?.toString());
+    generateToJson ??= ((name, info) => "'$name': $name");
+    generateFromJson ??= ((name, info) => "$name = json['$name']");
   }
 
   /// Performs a test to check if the [value] is of the current type.

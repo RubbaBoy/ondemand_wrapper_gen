@@ -33,33 +33,63 @@ void constructorGenerator(
 }
 
 void fromJson(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
-  buffer.write('${context.name}.fromJson(Map<String, dynamic> json)');
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
+  if (jsonType == JsonType.Object) {
+    buffer.write('${context.name}.fromJson(Map<String, dynamic> json)');
 
-  if (fields.isEmpty) {
-    buffer.writeln(';');
-    return;
-  }
-
-  buffer.writeln(' :');
-  fields.forEachI((index, info) {
-    if (index != 0) {
-      buffer.write(',\n');
+    if (fields.isEmpty) {
+      buffer.writeln(';');
+      return;
     }
-    buffer.write(
-        '${info.dartName} = ${info.type.generateFromJson(info).replaceAll('\$', "json['${info.jsonName}']")}');
-  });
-  buffer.writeln(';');
+
+    buffer.writeln(' :');
+    fields.forEachI((index, info) {
+      if (index != 0) {
+        buffer.write(',\n');
+      }
+      buffer.write(
+          '${info.dartName} = ${info.type.generateFromJson(info).replaceAll(
+              '\$', "json['${info.jsonName}']")}');
+    });
+    buffer.writeln(';');
+  } else if (jsonType == JsonType.Array) {
+    if (fields.length != 1) {
+      throw 'If jsonType is Array, field length can\'t be more than 1';
+    }
+
+    var first = fields.first;
+    buffer.writeln('${context.name}.fromJson(dynamic json) :');
+
+    buffer.writeln('${first.dartName} = ${first.type.generateFromJson(first).replaceAll(
+        '\$', 'json')}');
+
+    buffer.writeln(';');
+  }
 }
 
 void toJson(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
-  buffer.writeln('Map<String, dynamic> toJson() => {');
-  fields.forEachI((index, info) {
-    if (index != 0) {
-      buffer.write(',\n');
-    }
-    buffer.write("'${info.jsonName}': ${info.type.generateToJson(info).replaceAll('\$', info.dartName)}");
-  });
-  buffer.writeln('};');
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
+  if (jsonType == JsonType.Object) {
+    buffer.writeln('Map<String, dynamic> toJson() => {');
+    fields.forEachI((index, info) {
+      if (index != 0) {
+        buffer.write(',\n');
+      }
+      buffer.write(
+          "'${info.jsonName}': ${info.type.generateToJson(info).replaceAll(
+              '\$', info.dartName)}");
+    });
+    buffer.writeln('};');
+  } else if (jsonType == JsonType.Array) {
+    var first = fields.first;
+    buffer.writeln('List<dynamic> toJson() => ${first.type.generateToJson(first).replaceAll(
+        '\$', first.dartName)};');
+  }
+}
+
+enum JsonType {
+  /// For base objects of `Map<String, dynamic>`
+  Object,
+  /// For base objects of `List<Map<String, dynamic>>`
+  Array
 }

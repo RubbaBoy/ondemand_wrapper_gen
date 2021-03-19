@@ -3,7 +3,9 @@ import 'dart:core' as core;
 
 import 'package:dart_style/dart_style.dart';
 import 'package:meta/meta.dart';
+import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generators.dart';
+import 'package:ondemand_wrapper_gen/utility.dart';
 import 'package:recase/recase.dart';
 
 /// Used for generating blocks of code, such as fields, methods, constructors,
@@ -31,8 +33,19 @@ class ClassGenerator {
   final List<BlockGenerator> extraGenerators;
   final BlockCommentGenerator commentGenerator;
 
-  /// Allows the mutation of class names.
+  /// Allows the mutation of class names. By default, this returns the given
+  /// name with no mutations.
   NameTransformer nameTransformer;
+
+  /// Transforms the base class into an array wrapper containing one array
+  /// object. If the object was `foo`, this by default would return `foo_array`
+  /// and contain one list of `foo`s. The result is automatically formatted to
+  /// camelCase or PascalCase, depending on the usage. It is suggested to
+  /// separate the name and any appendation it with an underscore.
+  NameTransformer arrayTransformer;
+
+  /// Allows the mutation of single-field array classes' names.
+  NameTransformer arrayFieldTransformer;
 
   /// If [true], classes will be shared among field names. If [false], unique
   /// classes will be created no matter the field repetition.
@@ -49,8 +62,12 @@ class ClassGenerator {
   /// The amount of clashes for a class name
   var clashes = <String, int>{};
 
-  /// The [statusNameTransformer] overrides the [nameTransformer], replacing the
-  /// key names with the values.
+  /// The [statusNameTransformer] takes precedence over the supplied or default
+  /// [nameTransformer], replacing the key names with the values.
+  /// The [staticArrayTransformer] takes precedence over the supplied or
+  /// default [arrayTransformer], replacing the key names with the values.
+  /// The [staticArrayFieldTransformer] takes precedence over the supplied or
+  /// default [arrayFieldTransformer], replacing the key names with the values.
   /// [childrenRequireAggregation] must be set to true if the input is in the
   /// form of members with arrays of multiple responses. This simply invokes
   /// [aggregateMultiple] on each field of the input JSON before conversion.
@@ -58,32 +75,52 @@ class ClassGenerator {
   /// base field is an array, it will create a class with a single array in it.
   /// [ignoreBase] ignores the base class, parsing all member classes.
   /// [finalizeFields] sets if all generated fields should be final.
-  ClassGenerator(
-      {@required this.json,
-      String className,
-      this.childrenRequireAggregation = false,
-      this.forceBaseClasses = false,
-      this.ignoreBase = false,
-      String Function(String code) formatOutput,
-      this.extraGenerators = const [],
-      this.shareClasses = true,
-      this.finalizeFields = true,
-      this.commentGenerator,
-      this.nameTransformer,
-      Map<String, String> staticNameTransformer})
-      : formatOutput = formatOutput ?? _formatter.format {
+  ClassGenerator({
+    @required this.json,
+    String className,
+    this.childrenRequireAggregation = false,
+    this.forceBaseClasses = false,
+    this.ignoreBase = false,
+    String Function(String code) formatOutput,
+    this.extraGenerators = const [],
+    this.shareClasses = true,
+    this.finalizeFields = true,
+    this.commentGenerator,
+    NameTransformer nameTransformer,
+    NameTransformer arrayTransformer,
+    NameTransformer arrayFieldTransformer,
+    Map<String, String> staticNameTransformer = const {},
+    Map<String, String> staticArrayTransformer = const {},
+    Map<String, String> staticArrayFieldTransformer = const {},
+  }) : formatOutput = formatOutput ?? _formatter.format {
     this.className = className ?? 'Clazz$hashCode';
-    if (staticNameTransformer != null) {
-      nameTransformer = (name) => staticNameTransformer[name] ?? name;
-    }
+
+    staticNameTransformer = lowerCaseKey(staticNameTransformer);
+    staticArrayTransformer = lowerCaseKey(staticArrayTransformer);
+    staticArrayFieldTransformer = lowerCaseKey(staticArrayFieldTransformer);
+
+    var backupNameTransformer = nameTransformer ?? identity;
+    this.nameTransformer = (name) =>
+        staticNameTransformer[name.toLowerCase()] ??
+        backupNameTransformer(name);
+
+    var backupArrayTransformer = arrayTransformer ?? (name) => name + '_array';
+    this.arrayTransformer = (name) =>
+        staticArrayTransformer[name.toLowerCase()] ??
+        backupArrayTransformer(name);
+
+    var backupArrayFieldTransformer = arrayFieldTransformer ?? identity;
+    this.arrayFieldTransformer = (name) =>
+        staticArrayFieldTransformer[name.toLowerCase()] ??
+        backupArrayFieldTransformer(name);
   }
 
   String generated() {
     var string = StringBuffer();
 
-    var mutatedJson = json;
     if (childrenRequireAggregation) {
-      mutatedJson = json.map((key, value) {
+      var aggregated = json.map<String, MapEntry<dynamic, bool>>((key, value) {
+        var requireArray = false;
         var redone = value;
         if (!(value is List)) {
           throw 'All member should be lists!';
@@ -97,19 +134,24 @@ class ClassGenerator {
             redone = aggregate(list);
           }
         } else if (first is List) {
-          // this ain't gonna work
-          redone = {
-            key: doubleAggregateList(list)
-          };
+          redone = doubleAggregate({key: list});
+          requireArray = true;
         }
-        return MapEntry(key, redone);
+        return MapEntry(key, MapEntry(redone, requireArray));
       });
 
-      for (var jsonName in mutatedJson.keys) {
-        classVisitor(jsonName, mutatedJson[jsonName], base: true);
+      for (var jsonName in aggregated.keys) {
+        var entry = aggregated[jsonName];
+        var requireArray = entry.value;
+        var className =
+            requireArray ? validateArrayClassName(jsonName) : jsonName;
+
+        classVisitor(className, entry.key,
+            base: true, forceBaseClasses: false, arrayClass: entry.value);
       }
     } else {
-      classVisitor(className, mutatedJson, base: true);
+      classVisitor(className, json,
+          base: true, forceBaseClasses: forceBaseClasses);
     }
 
     print('Created classes: ${classes.keys.join(', ')}\n\n');
@@ -132,9 +174,15 @@ class ClassGenerator {
   /// member classes are.
   /// The [extraFields] is for a manual addition of fields to the class, in the
   /// case of something like adding a manual Array of a custom type.
+  /// [arrayClass] sets the [fromJson] [JsonType] to [JsonType.Object].
   void classVisitor(String name, Map<String, dynamic> json,
-      {bool base = false, List<ElementInfo> extraFields = const []}) {
-    var context = ClassContext(pascal(name));
+      {bool base = false,
+      List<ElementInfo> extraFields = const [],
+      bool forceBaseClasses,
+      bool arrayClass = false,
+      String overrideClassName}) {
+    forceBaseClasses ??= this.forceBaseClasses;
+    var context = ClassContext(createClassName(overrideClassName ?? name));
     var comment = commentGenerator?.call(context);
     if (comment != null) {
       comment = comment
@@ -149,18 +197,27 @@ class ClassGenerator {
 
     var fields = extraFields.toList();
     for (var entry in json.entries) {
+      var jsonName = entry.key;
+      var dartName;
+      if (arrayClass) {
+        dartName = validateArrayFieldName(jsonName);
+      }
+
       fields.add(ElementInfo.fromElement(this,
           forceSeparateArrays: base && forceBaseClasses,
           singleElement: entry.value,
-          jsonName: entry.key));
+          jsonName: jsonName,
+          dartName: dartName));
     }
+
+    var jsonType = arrayClass ? JsonType.Array : JsonType.Object;
 
     [
       (buffer, context, fields) =>
           fieldGenerator(buffer, context, fields, finalizeFields),
       constructorGenerator,
-      fromJson,
-      toJson,
+      (buffer, context, fields) => fromJson(buffer, context, fields, jsonType),
+      (buffer, context, fields) => toJson(buffer, context, fields, jsonType),
       ...extraGenerators,
     ].forEach((generator) {
       generator(res, context, fields);
@@ -170,7 +227,9 @@ class ClassGenerator {
     res.writeln('}');
 
     if (!base || !(base && ignoreBase)) {
-      classes[name] = res.toString();
+      classes[name.toLowerCase()] = res.toString();
+    } else {
+      print('Not registering class: $name');
     }
   }
 
@@ -195,8 +254,17 @@ class ClassGenerator {
       name = '$name${++clashes[name]}';
     }
 
-    return nameTransformer?.call(name) ?? name;
+    return pascal(validateClassName(name));
   }
+
+  /// Transforms a class name if necessary.
+  String validateClassName(String name) => nameTransformer(name);
+
+  /// Transforms an array class name if necessary.
+  String validateArrayClassName(String name) => arrayTransformer(name);
+
+  /// Transforms an array field name if necessary.
+  String validateArrayFieldName(String name) => arrayFieldTransformer(name);
 }
 
 class ClassContext {
@@ -222,14 +290,14 @@ class ElementInfo {
   /// the [jsonName] ran through [camel].
   ElementInfo(this.type,
       {this.jsonName = '', String dartName, this.arrayInfo, this.objectName})
-      : dartName = camel(jsonName);
+      : dartName = dartName ?? camel(jsonName);
 
   /// Creates an [ElementInfo] from a given [element].
   /// The [name] is the real variable name.
   /// [allElements] is all elements in the case of the type being a List.
   /// This is because if the type is an [ElementType.Object], the data is
   /// aggregated and the object is created.
-  /// If [forceSeparateArrays] is true, it will force arrays to become their own
+  /// If [forceSeparateArrays] is true, it will force base arrays to become their own
   /// classes.
   /// If [singleElement] is unset, [forceType] must be set.
   factory ElementInfo.fromElement(ClassGenerator classGenerator,
@@ -237,80 +305,80 @@ class ElementInfo {
       List listElement = const [],
       String jsonName = '',
       bool forceSeparateArrays = false,
-      ElementType forceType}) {
-    try {
-      if (listElement.isEmpty) {
-        listElement = [singleElement, ...listElement];
-      }
-
-      var element = listElement.first;
-
-      listElement.removeWhere((e) => e == null);
-
-      var type = ElementType.getType(element) ?? forceType;
-
-      if (type == ElementType.Object) {
-        if (classGenerator.createNewClass(jsonName)) {
-          var typeName = classGenerator.createClassName(jsonName);
-          classGenerator.classVisitor(typeName, aggregate(listElement));
-        }
-
-        var typeName =
-            classGenerator.createClassName(jsonName, respectOverflow: false);
-        return ElementInfo(type, jsonName: jsonName, objectName: typeName);
-      }
-
-      if (type == ElementType.Array) {
-        var creatingName = jsonName;
-
-        if (element == null) {
-          throw 'element must not be null when dealing with arrays';
-        }
-
-        var arrayType = getArrayType(classGenerator, creatingName, element);
-
-        if (forceSeparateArrays) {
-          // Create the outer containing class
-          var containingTypeName = classGenerator.createClassName(jsonName);
-
-          // The name of the class being created
-          creatingName = classGenerator.createClassName('Array_$jsonName');
-
-          // If the array's type is an Object, create the inner object
-          if (arrayType.type == ElementType.Object) {
-            classGenerator.classVisitor(
-                creatingName, aggregate(listElement.first));
-
-            classGenerator.classVisitor(containingTypeName, {}, extraFields: [
-              ElementInfo(ElementType.Array,
-                  jsonName: jsonName,
-                  arrayInfo: ElementInfo(ElementType.Object,
-                      jsonName: creatingName, objectName: creatingName)),
-            ]);
-          } else {
-            // If it's a normal array, simply make the class with an array
-            classGenerator.classVisitor(creatingName,
-                <String, dynamic>{jsonName: <Map<String, dynamic>>[]});
-
-            classGenerator.classVisitor(containingTypeName, {}, extraFields: [
-              ElementInfo.fromElement(classGenerator,
-                  singleElement: element, jsonName: jsonName),
-            ]);
-          }
-        }
-
-        var typeName = classGenerator.createClassName(creatingName,
-            respectOverflow: false);
-        return ElementInfo(type,
-            jsonName: creatingName, objectName: typeName, arrayInfo: arrayType);
-      }
-
-      return ElementInfo(type, jsonName: jsonName);
-    } catch (e, s) {
-      print(e);
-      print(s);
-      return null;
+      ElementType forceType,
+      String dartName}) {
+    if (listElement.isEmpty) {
+      listElement = [singleElement, ...listElement];
     }
+
+    var element = listElement.first;
+
+    listElement.removeWhere((e) => e == null);
+
+    var type = ElementType.getType(element) ?? forceType;
+
+    if (type == ElementType.Object) {
+      if (classGenerator.createNewClass(jsonName)) {
+        var typeName = classGenerator.createClassName(jsonName);
+        classGenerator.classVisitor(typeName, aggregate(listElement));
+      }
+
+      var typeName =
+          classGenerator.createClassName(jsonName, respectOverflow: false);
+      return ElementInfo(type,
+          jsonName: jsonName, objectName: typeName, dartName: dartName);
+    }
+
+    if (type == ElementType.Array) {
+      var creatingName = jsonName;
+
+      if (element == null) {
+        throw 'element must not be null when dealing with arrays';
+      }
+
+      var arrayType = getArrayType(classGenerator, creatingName, element);
+
+      if (forceSeparateArrays) {
+        // Create the outer containing class
+        var containingTypeName = classGenerator.createClassName(jsonName);
+
+        // The name of the class being created
+        creatingName = classGenerator
+            .createClassName(classGenerator.validateArrayClassName(jsonName));
+
+        // If the array's type is an Object, create the inner object
+        if (arrayType.type == ElementType.Object) {
+          classGenerator.classVisitor(
+              creatingName, aggregate(listElement.first));
+
+          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
+            ElementInfo(ElementType.Array,
+                jsonName: jsonName,
+                arrayInfo: ElementInfo(ElementType.Object,
+                    jsonName: creatingName, objectName: creatingName)),
+          ]);
+        } else {
+          // If it's a normal array, simply make the class with an array
+          classGenerator.classVisitor(creatingName,
+              <String, dynamic>{jsonName: <Map<String, dynamic>>[]});
+
+          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
+            ElementInfo.fromElement(classGenerator,
+                singleElement: element, jsonName: jsonName),
+          ]);
+        }
+      }
+
+      var typeName =
+          classGenerator.createClassName(creatingName, respectOverflow: false);
+      return ElementInfo(type,
+          jsonName: creatingName,
+          objectName: typeName,
+          arrayInfo: arrayType,
+          dartName: dartName);
+    }
+
+    return ElementInfo(type, jsonName: jsonName);
   }
 
   /// Gets the [ElementType] of the children of a given JSON array (In the form
@@ -603,21 +671,43 @@ Map<K, V> simpleAggregate<K, V>(List<dynamic> data) => data
 ///   ]
 /// }
 /// ```
-Map<String, dynamic> doubleAggregate(Map map) {
-  return map.map((key, value) => MapEntry(
-      key,
-      value.cast<List>().fold(<dynamic>[], (previous, element) {
-        previous.addAll(element);
-        return previous;
-      })));
-}
+Map<String, dynamic> doubleAggregate(
+        Map<String, dynamic> map) =>
+    Map.fromIterables(
+        map.keys,
+        map.keys.map((key) => (map[key] as List)
+            .cast<List>()
+            .map((e) => e.cast<Map<String, dynamic>>())
+            .map((e) => mergeDeep(e))
+            .toList()));
 
-List doubleAggregateList(List list) {
-  return list.fold(<dynamic>[], (previous, element) {
-    previous.addAll(element);
-    return previous;
+Map<String, dynamic> mergeDeep(List<Map<String, dynamic>> objects) {
+  return objects.reduce((prev, obj) {
+    obj.keys.forEach((key) {
+      var pVal = prev[key];
+      var oVal = obj[key];
+
+      if (pVal is List && oVal is List) {
+        prev[key] = [...pVal, ...oVal];
+      } else if (pVal is Map && oVal is Map) {
+        prev[key] = mergeDeep([pVal, oVal]);
+      } else {
+        prev[key] = oVal;
+      }
+    });
+
+    return prev;
   });
 }
+
+/// Transforms the keys of the map to lowercase.
+Map<String, String> lowerCaseKey(Map<String, String> map) =>
+    map.transformKeys((k, v) => k.toLowerCase());
+
+/// Returns a function that accepts a [String], transforms it to lowercase,
+/// and returns the result of [callback] with the new [String] as a parameter.
+String lower(String string, String Function(String) callback) =>
+    callback(string.toLowerCase());
 
 /// Formats a string into camelCase
 String camel(String string) => ReCase(makeValid(string)).camelCase;

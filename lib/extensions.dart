@@ -10,6 +10,14 @@ extension MapUtility<K, V> on Map<K, V> {
     var i = 0;
     forEach((k, v) => action(i++, k, v));
   }
+
+  /// Transforms each key of the map. [transform] should return the new key.
+  Map<K, V> transformKeys(K Function(K key, V value) transform) =>
+      map((k, v) => MapEntry(transform(k, v), v));
+
+  /// Transforms each value of the map. [transform] should return the new value.
+  Map<K, V> transformValues(V Function(K key, V value) transform) =>
+      map((k, v) => MapEntry(k, transform(k, v)));
 }
 
 extension ListUtility<E> on List<E> {

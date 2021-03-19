@@ -32,8 +32,9 @@ void main(List<String> arguments) {
   // groupEntries(bruh, (url) => )
 
   for (var url in bruh.keys) {
-    if (url != 'https://ondemand.rit.edu/api/config'
-      && url != 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items') {
+    if (
+    // url != 'https://ondemand.rit.edu/api/config' &&
+        url != 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items') {
       continue;
     }
 
@@ -64,20 +65,24 @@ Map<String, List<Entry>> groupEntries(Map<String, List<Entry>> allData,
 
 String generate(Map<String, List<Entry>> allData, String name, String url) {
   var aggregated = aggregateList(allData, url);
-  // print(jsonEncode(aggregated));
   var method = allData[url].first.request.method;
   var gen = ClassGenerator(
       childrenRequireAggregation: true,
       forceBaseClasses: true,
-      ignoreBase: true,
       json: aggregated,
       staticNameTransformer: {
         'Requests': 'Request',
-        'Responses': 'Response',
+        'Responses': 'FoodItem',
         'ChildGroups': 'ChildGroup'
       },
+      staticArrayTransformer: {
+        'Responses': 'ItemList'
+      },
+      staticArrayFieldTransformer: {
+        'Responses': 'items',
+      },
       commentGenerator: (context) {
-        if (context.name == 'Request' || context.name == 'Response') {
+        if (context.name == 'Request' || context.name == 'ItemList') {
           return '''
         Url: $url
         Method: $method

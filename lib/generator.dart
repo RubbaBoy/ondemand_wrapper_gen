@@ -2,7 +2,6 @@ import 'dart:core';
 import 'dart:core' as core;
 
 import 'package:dart_style/dart_style.dart';
-import 'package:meta/meta.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generators.dart';
 import 'package:ondemand_wrapper_gen/utility.dart';
@@ -26,7 +25,8 @@ final _formatter = DartFormatter();
 class ClassGenerator {
   final String Function(String) formatOutput;
   String className;
-  final Map<String, dynamic> json;
+  final String url;
+  final String method;
   final bool ignoreBase;
   final bool childrenRequireAggregation;
   final bool forceBaseClasses;
@@ -57,10 +57,10 @@ class ClassGenerator {
   final bool finalizeFields;
 
   /// Name, Content
-  var classes = <String, String>{};
+  final classes = <String, String>{};
 
   /// The amount of clashes for a class name
-  var clashes = <String, int>{};
+  final clashes = <String, int>{};
 
   /// The [statusNameTransformer] takes precedence over the supplied or default
   /// [nameTransformer], replacing the key names with the values.
@@ -76,8 +76,9 @@ class ClassGenerator {
   /// [ignoreBase] ignores the base class, parsing all member classes.
   /// [finalizeFields] sets if all generated fields should be final.
   ClassGenerator({
-    @required this.json,
-    String className,
+    this.className = 'BaseClass',
+    this.url,
+    this.method,
     this.childrenRequireAggregation = false,
     this.forceBaseClasses = false,
     this.ignoreBase = false,
@@ -93,8 +94,6 @@ class ClassGenerator {
     Map<String, String> staticArrayTransformer = const {},
     Map<String, String> staticArrayFieldTransformer = const {},
   }) : formatOutput = formatOutput ?? _formatter.format {
-    this.className = className ?? 'Clazz$hashCode';
-
     staticNameTransformer = lowerCaseKey(staticNameTransformer);
     staticArrayTransformer = lowerCaseKey(staticArrayTransformer);
     staticArrayFieldTransformer = lowerCaseKey(staticArrayFieldTransformer);
@@ -105,8 +104,7 @@ class ClassGenerator {
         backupNameTransformer(name);
 
     var backupArrayTransformer = arrayTransformer ?? (name) => name + '_array';
-    this.arrayTransformer = (name) =>
-        staticArrayTransformer[name.toLowerCase()] ??
+    this.arrayTransformer = (name) => staticArrayTransformer[name.toLowerCase()] ??
         backupArrayTransformer(name);
 
     var backupArrayFieldTransformer = arrayFieldTransformer ?? identity;
@@ -115,7 +113,27 @@ class ClassGenerator {
         backupArrayFieldTransformer(name);
   }
 
-  String generated() {
+  factory ClassGenerator.fromSettings(GeneratorSettings settings) =>
+      ClassGenerator(
+          className: settings.className,
+          url: settings.url,
+          method: settings.method,
+          childrenRequireAggregation: settings.childrenRequireAggregation,
+          forceBaseClasses: settings.forceBaseClasses,
+          ignoreBase: settings.ignoreBase,
+          formatOutput: settings.formatOutput,
+          extraGenerators: settings.extraGenerators,
+          shareClasses: settings.shareClasses,
+          finalizeFields: settings.finalizeFields,
+          commentGenerator: settings.commentGenerator,
+          nameTransformer: settings.nameTransformer,
+          arrayTransformer: settings.arrayTransformer,
+          arrayFieldTransformer: settings.arrayFieldTransformer,
+          staticNameTransformer: settings.staticNameTransformer,
+          staticArrayTransformer: settings.staticArrayTransformer,
+          staticArrayFieldTransformer: settings.staticArrayFieldTransformer);
+
+  String generated(Map<String, dynamic> json) {
     var string = StringBuffer();
 
     if (childrenRequireAggregation) {
@@ -182,7 +200,8 @@ class ClassGenerator {
       bool arrayClass = false,
       String overrideClassName}) {
     forceBaseClasses ??= this.forceBaseClasses;
-    var context = ClassContext(createClassName(overrideClassName ?? name));
+    var context =
+        ClassContext(createClassName(overrideClassName ?? name), url, method);
     var comment = commentGenerator?.call(context);
     if (comment != null) {
       comment = comment
@@ -267,11 +286,149 @@ class ClassGenerator {
   String validateArrayFieldName(String name) => arrayFieldTransformer(name);
 }
 
+/// The settings for [ClassGenerator]s.
+class GeneratorSettings {
+  final String className;
+  final String url;
+  final String method;
+  final bool childrenRequireAggregation;
+  final bool forceBaseClasses;
+  final bool ignoreBase;
+  final String Function(String code) formatOutput;
+  final List<BlockGenerator> extraGenerators;
+  final bool shareClasses;
+  final bool finalizeFields;
+  final BlockCommentGenerator commentGenerator;
+  final NameTransformer nameTransformer;
+  final NameTransformer arrayTransformer;
+  final NameTransformer arrayFieldTransformer;
+  final Map<String, String> staticNameTransformer;
+  final Map<String, String> staticArrayTransformer;
+  final Map<String, String> staticArrayFieldTransformer;
+
+  /// Creates a [GeneratorSettings] with the default values.
+  factory GeneratorSettings.defaultSettings() => GeneratorSettings(
+        className: 'BaseClass',
+        childrenRequireAggregation: false,
+        forceBaseClasses: false,
+        ignoreBase: false,
+        extraGenerators: const [],
+        shareClasses: true,
+        finalizeFields: true,
+        staticNameTransformer: const {},
+        staticArrayTransformer: const {},
+        staticArrayFieldTransformer: const {},
+      );
+
+  /// Creates a [GeneratorSettings] with all null values. Suggested as the
+  /// second parameter for [GeneratorSettings.mergeSettings] (So the fallback
+  /// can set default values)
+  const GeneratorSettings(
+      {this.className,
+      this.url,
+      this.method,
+      this.childrenRequireAggregation,
+      this.forceBaseClasses,
+      this.ignoreBase,
+      this.formatOutput,
+      this.extraGenerators,
+      this.shareClasses,
+      this.finalizeFields,
+      this.commentGenerator,
+      this.nameTransformer,
+      this.arrayTransformer,
+      this.arrayFieldTransformer,
+      this.staticNameTransformer,
+      this.staticArrayTransformer,
+      this.staticArrayFieldTransformer});
+
+  /// Creates a [GeneratorSettings] with the same values as [merging] but in
+  /// the case of null values, using [fallback].
+  factory GeneratorSettings.mergeSettings(
+          GeneratorSettings merging, GeneratorSettings fallback) =>
+      GeneratorSettings(
+        className: merging.className ?? fallback.className,
+        url: merging.url ?? fallback.url,
+        method: merging.method ?? fallback.method,
+        childrenRequireAggregation: merging.childrenRequireAggregation ??
+            fallback.childrenRequireAggregation,
+        forceBaseClasses: merging.forceBaseClasses ?? fallback.forceBaseClasses,
+        ignoreBase: merging.ignoreBase ?? fallback.ignoreBase,
+        formatOutput: merging.formatOutput ?? fallback.formatOutput,
+        extraGenerators: merging.extraGenerators ?? fallback.extraGenerators,
+        shareClasses: merging.shareClasses ?? fallback.shareClasses,
+        finalizeFields: merging.finalizeFields ?? fallback.finalizeFields,
+        commentGenerator: merging.commentGenerator ?? fallback.commentGenerator,
+        nameTransformer: merging.nameTransformer ?? fallback.nameTransformer,
+        arrayTransformer: merging.arrayTransformer ?? fallback.arrayTransformer,
+        arrayFieldTransformer:
+            merging.arrayFieldTransformer ?? fallback.arrayFieldTransformer,
+        staticNameTransformer:
+            merging.staticNameTransformer ?? fallback.staticNameTransformer,
+        staticArrayTransformer:
+            merging.staticArrayTransformer ?? fallback.staticArrayTransformer,
+        staticArrayFieldTransformer: merging.staticArrayFieldTransformer ??
+            fallback.staticArrayFieldTransformer,
+      );
+
+  /// The same as merging settings with the [merging] be [newValues] and the
+  /// fallback being the current [GeneratorSettings]. It's suggested to start
+  /// with a [GeneratorSettings.empty] for [newValue].
+  ///
+  /// The [fallback], if set, will replace any [null] values.
+  GeneratorSettings copyWith({
+    String className,
+    String url,
+    String method,
+    bool childrenRequireAggregation,
+    bool forceBaseClasses,
+    bool ignoreBase,
+    String Function(String code) formatOutput,
+    List<BlockGenerator> extraGenerators,
+    bool shareClasses,
+    bool finalizeFields,
+    BlockCommentGenerator commentGenerator,
+    NameTransformer nameTransformer,
+    NameTransformer arrayTransformer,
+    NameTransformer arrayFieldTransformer,
+    Map<String, String> staticNameTransformer,
+    Map<String, String> staticArrayTransformer,
+    Map<String, String> staticArrayFieldTransformer,
+  }) =>
+      GeneratorSettings.mergeSettings(
+          GeneratorSettings(
+            className: className,
+            url: url,
+            method: method,
+            childrenRequireAggregation: childrenRequireAggregation,
+            forceBaseClasses: forceBaseClasses,
+            ignoreBase: ignoreBase,
+            formatOutput: formatOutput,
+            extraGenerators: extraGenerators,
+            shareClasses: shareClasses,
+            finalizeFields: finalizeFields,
+            commentGenerator: commentGenerator,
+            nameTransformer: nameTransformer,
+            arrayTransformer: arrayTransformer,
+            arrayFieldTransformer: arrayFieldTransformer,
+            staticNameTransformer: staticNameTransformer,
+            staticArrayTransformer: staticArrayTransformer,
+            staticArrayFieldTransformer: staticArrayFieldTransformer,
+          ),
+          this);
+}
+
 class ClassContext {
-  /// The name of the class.
+  /// The name of the class..
   final String name;
 
-  ClassContext(this.name);
+  /// The URL used for the request/receiving body.
+  final String url;
+
+  /// The HTTP method in the request.
+  final String method;
+
+  ClassContext(this.name, this.url, this.method);
 }
 
 class ElementInfo {

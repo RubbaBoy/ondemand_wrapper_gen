@@ -78,8 +78,8 @@ void main(List<String> args) {
 
   // var ondemandInput = jsonDecode(File('E:\\ondemand_fiddler\\ondemand-1.har').readAsStringSync());
 
-  var gen = ClassGenerator(className: 'base', childrenRequireAggregation: true, json: json);
-  print(gen.generated());
+  // var gen = ClassGenerator(className: 'base', childrenRequireAggregation: true, json: json);
+  // print(gen.generated());
   // var gen = ClassGenerator(className: 'base', json: ondemandInput);
   // var outFile = File(r'E:\ondemand_wrapper_gen\lib\gen.g.dart');
   // outFile.writeAsString(gen.generated());

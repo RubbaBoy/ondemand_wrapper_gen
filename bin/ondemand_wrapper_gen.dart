@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generator.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
 import 'package:ondemand_wrapper_gen/utility.dart';
-import 'package:ondemand_wrapper_gen/extensions.dart';
+
+typedef CreateGenerator = ClassGenerator Function(
+    Map<String, dynamic> json, String method);
 
 void main(List<String> arguments) {
   var input = jsonDecode(
@@ -31,16 +34,39 @@ void main(List<String> arguments) {
 
   // groupEntries(bruh, (url) => )
 
+  var allowedUrls = [
+    'https://ondemand.rit.edu/api/config',
+    'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
+    'https://ondemand.rit.edu/api/sites/1312'
+  ];
+
   for (var url in bruh.keys) {
-    if (
-    // url != 'https://ondemand.rit.edu/api/config' &&
-        url != 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items') {
+    if (!allowedUrls.contains(url)) {
       continue;
+    }
+
+    var defaultConfig = GeneratorSettings.defaultSettings().copyWith(
+        childrenRequireAggregation: true,
+        forceBaseClasses: true,
+        commentGenerator: defaultCommentGenerator());
+
+    var settings = defaultConfig;
+
+    if (url.endsWith('get-items')) {
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'Response': 'FoodItem',
+        'ChildGroups': 'ChildGroup',
+        'ItemImages': 'ItemImage',
+      }, staticArrayTransformer: {
+        'Response': 'ItemList'
+      }, staticArrayFieldTransformer: {
+        'Response': 'items',
+      }, commentGenerator: defaultCommentGenerator(['Request', 'ItemList']));
     }
 
     var name = snake(url.substring(url.lastIndexOf('/')));
     var outFile = [generateDirectory, '$name.g.dart'].file;
-    outFile.writeAsString(generate(bruh, name, url));
+    outFile.writeAsString(generate(bruh, name, url, settings));
   }
 
   //
@@ -63,44 +89,38 @@ Map<String, List<Entry>> groupEntries(Map<String, List<Entry>> allData,
   return map;
 }
 
-String generate(Map<String, List<Entry>> allData, String name, String url) {
+String generate(Map<String, List<Entry>> allData, String name, String url,
+    GeneratorSettings settings) {
   var aggregated = aggregateList(allData, url);
-  var method = allData[url].first.request.method;
-  var gen = ClassGenerator(
-      childrenRequireAggregation: true,
-      forceBaseClasses: true,
-      json: aggregated,
-      staticNameTransformer: {
-        'Requests': 'Request',
-        'Responses': 'FoodItem',
-        'ChildGroups': 'ChildGroup'
-      },
-      staticArrayTransformer: {
-        'Responses': 'ItemList'
-      },
-      staticArrayFieldTransformer: {
-        'Responses': 'items',
-      },
-      commentGenerator: (context) {
-        if (context.name == 'Request' || context.name == 'ItemList') {
-          return '''
-        Url: $url
-        Method: $method
-        ''';
-        }
-
-        return null;
-      });
-  return gen.generated();
+  var method = getMethod(allData, url);
+  var gen =
+      ClassGenerator.fromSettings(settings.copyWith(url: url, method: method));
+  return gen.generated(aggregated);
 }
+
+String getMethod(Map<String, List<Entry>> allData, String url) =>
+    allData[url].first.request.method;
+
+BlockCommentGenerator defaultCommentGenerator(
+        [List<String> commentClasses = const ['Request', 'Response']]) =>
+    (context) {
+      if (!commentClasses.contains(context.name)) {
+        return null;
+      }
+
+      return '''
+  Url: ${context.url}
+  Method: ${context.method}
+  ''';
+    };
 
 Map<String, dynamic> aggregateList(
     Map<String, List<Entry>> allData, String url) {
   var entries = allData[url];
 
   return {
-    'requests': [for (var entry in entries) entry.request.postData.json],
-    'responses': [for (var entry in entries) entry.response.content.json]
+    'request': [for (var entry in entries) entry.request.postData.json],
+    'response': [for (var entry in entries) entry.response.content.json]
   };
 }
 

@@ -10,3 +10,4 @@ doc/api/
 rout/
 .idea/
 *.iml
+gen/

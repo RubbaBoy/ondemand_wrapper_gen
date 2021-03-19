@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:ondemand_wrapper_gen/generator.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
-import 'package:ondemand_wrapper_gen/json_utility.dart';
-import 'package:ondemand_wrapper_gen/get_items.g.dart' as get_items;
+import 'package:ondemand_wrapper_gen/utility.dart';
+import 'package:ondemand_wrapper_gen/extensions.dart';
 
 void main(List<String> arguments) {
   var input = jsonDecode(
@@ -19,15 +19,32 @@ void main(List<String> arguments) {
     bruh.putIfAbsent(entry.request.url, () => []).add(entry);
   }
 
-  // bruh.forEach((key, value) {
-  //   print('URL: $key');
-  //   for (var value1 in value) {
-  //     print('\t${value1.startedDateTime}');
-  //   }
-  // });
+  bruh.forEach((key, value) {
+    print('URL: $key');
+    for (var value1 in value) {
+      print('\t${value1.startedDateTime}');
+    }
+  });
 
-  generate(bruh, 'getItems',
-      'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items');
+  var generateDirectory = [r'E:\ondemand_wrapper_gen\lib\gen'].directory;
+  generateDirectory.createSync();
+
+  // groupEntries(bruh, (url) => )
+
+  for (var url in bruh.keys) {
+    if (url != 'https://ondemand.rit.edu/api/config'
+      && url != 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items') {
+      continue;
+    }
+
+    var name = snake(url.substring(url.lastIndexOf('/')));
+    var outFile = [generateDirectory, '$name.g.dart'].file;
+    outFile.writeAsString(generate(bruh, name, url));
+  }
+
+  //
+  // generate(bruh, 'getItems',
+  //     'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items');
 
   // var entry = bruh['https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items'].first;
   // var responseJson = entry.response.content.json;
@@ -35,11 +52,19 @@ void main(List<String> arguments) {
   //
   // var response = get_items.Response.fromJson(responseJson);
   // print('Item: ${response.name}');
-
 }
 
-void generate(Map<String, List<Entry>> allData, String name, String url) {
+Map<String, List<Entry>> groupEntries(Map<String, List<Entry>> allData,
+    String Function(String url) nameTransform) {
+  var map = <String, List<Entry>>{};
+  map.forEach((key, value) =>
+      map.putIfAbsent(nameTransform(key), () => <Entry>[]).addAll(value));
+  return map;
+}
+
+String generate(Map<String, List<Entry>> allData, String name, String url) {
   var aggregated = aggregateList(allData, url);
+  // print(jsonEncode(aggregated));
   var method = allData[url].first.request.method;
   var gen = ClassGenerator(
       childrenRequireAggregation: true,
@@ -61,8 +86,7 @@ void generate(Map<String, List<Entry>> allData, String name, String url) {
 
         return null;
       });
-  var outFile = File('E:\\ondemand_wrapper_gen\\lib\\${snake(name)}.g.dart');
-  outFile.writeAsString(gen.generated());
+  return gen.generated();
 }
 
 Map<String, dynamic> aggregateList(

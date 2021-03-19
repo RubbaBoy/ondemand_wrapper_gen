@@ -181,7 +181,7 @@ class PostData {
   final String mimeType;
   final String text;
 
-  dynamic get json => jsonDecode(text);
+  dynamic get json => (text?.isEmpty ?? true) ? {} : jsonDecode(text);
 
   PostData.fromJson(Map<String, dynamic> json)
       : mimeType = json['mimeType'],

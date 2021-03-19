@@ -67,7 +67,7 @@ class ClassGenerator {
       String Function(String code) formatOutput,
       this.extraGenerators = const [],
       this.shareClasses = true,
-        this.finalizeFields = true,
+      this.finalizeFields = true,
       this.commentGenerator,
       this.nameTransformer,
       Map<String, String> staticNameTransformer})
@@ -91,15 +91,26 @@ class ClassGenerator {
         var list = value as List;
         var first = list.isNotEmpty ? list.first : null;
         if (first is Map) {
-          redone = aggregate(list);
+          if (first.isEmpty) {
+            redone = <String, dynamic>{};
+          } else {
+            redone = aggregate(list);
+          }
         } else if (first is List) {
-          redone = doubleAggregateList(list);
+          // this ain't gonna work
+          redone = {
+            key: doubleAggregateList(list)
+          };
         }
         return MapEntry(key, redone);
       });
-    }
 
-    classVisitor(className, mutatedJson, base: true);
+      for (var jsonName in mutatedJson.keys) {
+        classVisitor(jsonName, mutatedJson[jsonName], base: true);
+      }
+    } else {
+      classVisitor(className, mutatedJson, base: true);
+    }
 
     print('Created classes: ${classes.keys.join(', ')}\n\n');
 
@@ -145,7 +156,8 @@ class ClassGenerator {
     }
 
     [
-      (buffer, context, fields) => fieldGenerator(buffer, context, fields, finalizeFields),
+      (buffer, context, fields) =>
+          fieldGenerator(buffer, context, fields, finalizeFields),
       constructorGenerator,
       fromJson,
       toJson,
@@ -282,7 +294,7 @@ class ElementInfo {
 
             classGenerator.classVisitor(containingTypeName, {}, extraFields: [
               ElementInfo.fromElement(classGenerator,
-                  singleElement: singleElement.first, jsonName: jsonName),
+                  singleElement: element, jsonName: jsonName),
             ]);
           }
         }
@@ -536,9 +548,25 @@ String generateTempVar(String name, int depth) {
 
 /// Takes in an uncasted [List<Map<String, dynamic>>] [data], and aggregates all
 /// children of the list to a single [Map<String, dynamic>]
-Map<String, dynamic> aggregate(List<dynamic> data) =>
-    data.cast<Map<String, dynamic>>().fold(<String, dynamic>{},
-        (previousValue, element) => {...previousValue, ...element});
+Map<String, dynamic> aggregate(List<dynamic> data) {
+  if (data.isEmpty) {
+    return {};
+  }
+
+  if (data.first.isEmpty) {
+    return {};
+  }
+
+  if (!(data.first is Map<String, dynamic>)) {
+    return simpleAggregate<dynamic, dynamic>(data) as Map<String, dynamic>;
+  }
+
+  return simpleAggregate<String, dynamic>(data);
+}
+
+Map<K, V> simpleAggregate<K, V>(List<dynamic> data) => data
+    .cast<Map<K, V>>()
+    .fold(<K, V>{}, (previousValue, element) => {...previousValue, ...element});
 
 /// Aggregates multiple (usually response) objects into one. This only works
 /// with a list inside of a list, combining all inner lists. For example, an

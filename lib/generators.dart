@@ -61,6 +61,7 @@ void fromJson(
     });
     buffer.writeln(';');
   } else if (jsonType == JsonType.Array) {
+    print('fields: $fields');
     if (fields.length != 1) {
       throw 'If jsonType is Array, field length can\'t be more than 1';
     }

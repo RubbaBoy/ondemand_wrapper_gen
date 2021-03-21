@@ -166,6 +166,7 @@ class ClassGenerator {
         }
         var list = value as List;
         var first = list.isNotEmpty ? list.first : null;
+        print('first: ${first.runtimeType}');
         if (first is Map) {
           if (first.isEmpty) {
             redone = <String, dynamic>{};
@@ -173,11 +174,19 @@ class ClassGenerator {
             redone = aggregate(list);
           }
         } else if (first is List) {
-          redone = doubleAggregate({key: list});
+          // print('REDONE ==============');
+          // print(prettyEncode(first));
+          var firstEntry = doubleAggregate({key: list}).entries.first;
+          var firstList = firstEntry.value as List;
+          redone = {firstEntry.key: [mergeDeep(firstList.cast<Map<String, dynamic>>())]};
+          // print('REDONE ==============');
+          // print(prettyEncode(redone));
           requireArray = true;
         }
         return MapEntry(key, MapEntry(redone, requireArray));
       });
+
+      // print(prettyEncode(aggregated.map((key, value) => MapEntry(key, value.key))));
 
       for (var jsonName in aggregated.keys) {
         var entry = aggregated[jsonName];
@@ -185,8 +194,10 @@ class ClassGenerator {
         var className =
         requireArray ? validateArrayClassName(jsonName) : jsonName;
 
-        classVisitor(className, entry.key, '',
-            base: true, forceBaseClasses: false, arrayClass: entry.value);
+        print('key = ${entry.key}');
+
+        classVisitor(className, entry.key, jsonName,
+            base: true, forceBaseClasses: false, arrayClass: requireArray);
       }
     } else {
       classVisitor(className, json, '',
@@ -226,6 +237,7 @@ class ClassGenerator {
     forceBaseClasses ??= this.forceBaseClasses;
     var context =
     ClassContext(createClassName(overrideClassName ?? name), url, method, cleanPath(jsonPath));
+    print('Creating class "${context.name}" path = $jsonPath');
     var comment = commentGenerator?.call(context);
     if (comment != null) {
       comment = comment
@@ -240,6 +252,8 @@ class ClassGenerator {
 
     var fields = extraFields.toList();
     if (forceObjectCounting.contains(cleanPath(jsonPath))) {
+      print('GOT IT!');
+      print('first: ${json.values.first}');
       var deep = mergeDeep(json.values.cast<Map<String, dynamic>>().toList());
       var creatingName = createClassName(
           validateClassName('${context.name}_num'));
@@ -557,6 +571,11 @@ class ElementInfo {
     listElement.removeWhere((e) => e == null);
 
     var type = ElementType.getType(element) ?? forceType;
+
+    print('Creating "$jsonName" of type: $type');
+    if (jsonName == 'request') {
+      print(element);
+    }
 
     if (type == ElementType.Object) {
       if (classGenerator.createNewClass(jsonName)) {
@@ -992,8 +1011,32 @@ String pascal(String string) => ReCase(makeValid(string)).pascalCase;
 /// Formats a string into snake-case
 String snake(String string) => ReCase(makeValid(string)).snakeCase;
 
+const KEYWORDS = [
+'abstract',	'else',	'import',	'super',
+'as', 'enum',	'in',	'switch',
+'assert',	'export',	'interface',	'sync',
+'async', 'extends',	'is',	'this',
+'await', 'extension',	'library',	'throw',
+'break',	'external',	'mixin',	'true',
+'case',	'factory',	'new',	'try',
+'catch',	'false',	'null',	'typedef',
+'class',	'final',	'on',	'var',
+'const',	'finally',	'operator',	'void',
+'continue',	'for',	'part',	'while',
+'covariant',	'Function',	'rethrow',	'with',
+'default',	'get',	'return',	'yield',
+'deferred',	'hide',	'set',
+'do',	'if',	'show',
+'dynamic',	'implements',	'static',
+];
+
 /// Removes all invalid characters to be used in a Dart name.
-String verifyDartName(String name) => name.replaceAll(RegExp(r'[^\w]'), '_');
+String verifyDartName(String name) {
+  if (KEYWORDS.contains(name)) {
+    return '${name}Field';
+  }
+  return name.replaceAll(RegExp(r'[^\w]'), '_');
+}
 
 /// Takes in a potentially invalid name and makes it valid for Dart classes
 /// or fields. e.g. if `1` is supplied, `Num1` is returned.

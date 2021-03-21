@@ -39,8 +39,8 @@ void main(List<String> arguments) {
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
     // 'https://ondemand.rit.edu/api/sites/1312',
     // 'https://ondemand.rit.edu/static/assets/manifest.json'
-    'https://ondemand.rit.edu/api/userProfile/decryptSamlCookie',
-    // 'https://ondemand.rit.edu/api/sites/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getKitchenLeadTimeForStores',
+    // 'https://ondemand.rit.edu/api/userProfile/decryptSamlCookie',
+    'https://ondemand.rit.edu/api/sites/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getKitchenLeadTimeForStores',
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162',
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162/menus/3403',
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b87df',
@@ -57,6 +57,13 @@ void main(List<String> arguments) {
     // 'https://ondemand.rit.edu/api/communication/getSMSReceipt',
     // 'https://ondemand.rit.edu/api/communication/sendSMSReceipt',
   ];
+
+  // var entry = bruh['https://ondemand.rit.edu/api/sites/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getKitchenLeadTimeForStores'].first;
+  // var responseJson = entry.request.postData.json;
+  // print('request =');
+  // print(prettyEncode(responseJson));
+  //
+  // if (true) return;
 
   for (var url in bruh.keys) {
     if (!allowedUrls.contains(url)) {
@@ -94,6 +101,17 @@ void main(List<String> arguments) {
         '[].response.pickUpConfig.conceptEntries',
         '[].response.atriumConfig.tenders'
       ]);
+    } else if (url.endsWith('getKitchenLeadTimeForStores')) {
+      settings = defaultConfig.copyWith(
+        staticNameTransformer: {
+          'ResponseNum': 'Kitchen'
+        },
+        staticArrayFieldTransformer: {
+        },
+        forceObjectCounting: [
+          'response'
+        ]
+      );
     }
 
     var name = snake(url.substring(url.lastIndexOf('/')));
@@ -127,7 +145,7 @@ String generate(Map<String, List<Entry>> allData, String name, String url,
   var method = getMethod(allData, url);
   var gen =
       ClassGenerator.fromSettings(settings.copyWith(url: url, method: method));
-  print(prettyEncode(aggregated));
+  // print(prettyEncode(aggregated));
   return gen.generated(aggregated);
 }
 

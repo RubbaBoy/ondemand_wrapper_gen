@@ -129,7 +129,7 @@ class ResponseContent {
   final String text;
   final int size;
 
-  dynamic get json => jsonDecode(text);
+  dynamic get json => (text?.isEmpty ?? true) ? {} : jsonDecode(text);
 
   ResponseContent.fromJson(Map<String, dynamic> json)
       : compression = json['compression'],

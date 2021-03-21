@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:core';
 import 'dart:core' as core;
 
@@ -56,6 +57,22 @@ class ClassGenerator {
   /// If [true], all generated fields will be final.
   final bool finalizeFields;
 
+  /// The JSON path of the object containing multiple objects, all with names
+  /// as a number. This will force ALL children members into a single object.
+  /// For example:
+  /// ```json
+  /// {
+  ///   "foo": {
+  ///     "1": {
+  ///       "name": "Bar"
+  ///     }
+  ///   }
+  /// }
+  /// ```
+  /// The path would be `foo` and `foo.1` would be turned into an object with
+  /// the name 1. Used for varying dynamic keys.
+  final List<String> forceObjectCounting;
+
   /// Name, Content
   final classes = <String, String>{};
 
@@ -93,6 +110,7 @@ class ClassGenerator {
     Map<String, String> staticNameTransformer = const {},
     Map<String, String> staticArrayTransformer = const {},
     Map<String, String> staticArrayFieldTransformer = const {},
+    this.forceObjectCounting = const [],
   }) : formatOutput = formatOutput ?? _formatter.format {
     staticNameTransformer = lowerCaseKey(staticNameTransformer);
     staticArrayTransformer = lowerCaseKey(staticArrayTransformer);
@@ -100,16 +118,17 @@ class ClassGenerator {
 
     var backupNameTransformer = nameTransformer ?? identity;
     this.nameTransformer = (name) =>
-        staticNameTransformer[name.toLowerCase()] ??
+    staticNameTransformer[name.toLowerCase()] ??
         backupNameTransformer(name);
 
     var backupArrayTransformer = arrayTransformer ?? (name) => name + '_array';
-    this.arrayTransformer = (name) => staticArrayTransformer[name.toLowerCase()] ??
+    this.arrayTransformer = (name) =>
+    staticArrayTransformer[name.toLowerCase()] ??
         backupArrayTransformer(name);
 
     var backupArrayFieldTransformer = arrayFieldTransformer ?? identity;
     this.arrayFieldTransformer = (name) =>
-        staticArrayFieldTransformer[name.toLowerCase()] ??
+    staticArrayFieldTransformer[name.toLowerCase()] ??
         backupArrayFieldTransformer(name);
   }
 
@@ -131,9 +150,11 @@ class ClassGenerator {
           arrayFieldTransformer: settings.arrayFieldTransformer,
           staticNameTransformer: settings.staticNameTransformer,
           staticArrayTransformer: settings.staticArrayTransformer,
-          staticArrayFieldTransformer: settings.staticArrayFieldTransformer);
+          staticArrayFieldTransformer: settings.staticArrayFieldTransformer,
+          forceObjectCounting: settings.forceObjectCounting);
 
   String generated(Map<String, dynamic> json) {
+    json = Map.unmodifiable(json);
     var string = StringBuffer();
 
     if (childrenRequireAggregation) {
@@ -162,17 +183,17 @@ class ClassGenerator {
         var entry = aggregated[jsonName];
         var requireArray = entry.value;
         var className =
-            requireArray ? validateArrayClassName(jsonName) : jsonName;
+        requireArray ? validateArrayClassName(jsonName) : jsonName;
 
-        classVisitor(className, entry.key,
+        classVisitor(className, entry.key, '',
             base: true, forceBaseClasses: false, arrayClass: entry.value);
       }
     } else {
-      classVisitor(className, json,
+      classVisitor(className, json, '',
           base: true, forceBaseClasses: forceBaseClasses);
     }
 
-    print('Created classes: ${classes.keys.join(', ')}\n\n');
+    print('Created classes (${classes.length}): ${classes.keys.join(', ')}\n\n');
 
     classes.values.forEach(string.writeln);
 
@@ -193,15 +214,18 @@ class ClassGenerator {
   /// The [extraFields] is for a manual addition of fields to the class, in the
   /// case of something like adding a manual Array of a custom type.
   /// [arrayClass] sets the [fromJson] [JsonType] to [JsonType.Object].
-  void classVisitor(String name, Map<String, dynamic> json,
+  /// [countingObject] If the object's key is a dynamic number, requiring
+  /// additional serialization data.
+  void classVisitor(String name, Map<String, dynamic> json, String jsonPath,
       {bool base = false,
-      List<ElementInfo> extraFields = const [],
-      bool forceBaseClasses,
-      bool arrayClass = false,
-      String overrideClassName}) {
+        List<ElementInfo> extraFields = const [],
+        bool forceBaseClasses,
+        bool arrayClass = false,
+        String overrideClassName,
+      bool countingObject = false}) {
     forceBaseClasses ??= this.forceBaseClasses;
     var context =
-        ClassContext(createClassName(overrideClassName ?? name), url, method);
+    ClassContext(createClassName(overrideClassName ?? name), url, method, cleanPath(jsonPath));
     var comment = commentGenerator?.call(context);
     if (comment != null) {
       comment = comment
@@ -215,28 +239,55 @@ class ClassGenerator {
     res.writeln('\nclass ${context.name} {');
 
     var fields = extraFields.toList();
-    for (var entry in json.entries) {
-      var jsonName = entry.key;
-      var dartName;
-      if (arrayClass) {
-        dartName = validateArrayFieldName(jsonName);
-      }
+    if (forceObjectCounting.contains(cleanPath(jsonPath))) {
+      var deep = mergeDeep(json.values.cast<Map<String, dynamic>>().toList());
+      var creatingName = createClassName(
+          validateClassName('${context.name}_num'));
 
-      fields.add(ElementInfo.fromElement(this,
-          forceSeparateArrays: base && forceBaseClasses,
-          singleElement: entry.value,
-          jsonName: jsonName,
-          dartName: dartName));
+      // Turn deep into an array object holding a custom class in fields
+
+      var keyName = nonClashingFieldName(deep, 'key');
+      classVisitor(creatingName, deep, '$jsonPath.[]', countingObject: true, extraFields: [
+        ElementInfo(ElementType.String, jsonName: keyName, countingKey: true),
+      ]);
+
+      fields.add(ElementInfo(ElementType.KeyedObject,
+          jsonName: camel(name),
+          arrayInfo: ElementInfo(ElementType.Object,
+              jsonName: creatingName, objectName: creatingName)));
+    } else {
+      for (var entry in json.entries) {
+        var jsonName = entry.key;
+        var dartName;
+        if (arrayClass) {
+          dartName = validateArrayFieldName(jsonName);
+        }
+
+        fields.add(ElementInfo.fromElement(this, '$jsonPath',
+            forceSeparateArrays: base && forceBaseClasses,
+            singleElement: entry.value,
+            jsonName: jsonName,
+            dartName: dartName));
+      }
     }
 
-    var jsonType = arrayClass ? JsonType.Array : JsonType.Object;
+    var jsonType = JsonType.Object;
+    if (countingObject) {
+      jsonType = JsonType.KeyedObject;
+    } else if (arrayClass) {
+      jsonType = JsonType.Array;
+    }
 
     [
       (buffer, context, fields) =>
           fieldGenerator(buffer, context, fields, finalizeFields),
       constructorGenerator,
-      (buffer, context, fields) => fromJson(buffer, context, fields, jsonType),
-      (buffer, context, fields) => toJson(buffer, context, fields, jsonType),
+          (buffer, context, fields) =>
+          getKey(buffer, context, fields, jsonType),
+          (buffer, context, fields) =>
+          fromJson(buffer, context, fields, jsonType),
+          (buffer, context, fields) =>
+          toJson(buffer, context, fields, jsonType),
       ...extraGenerators,
     ].forEach((generator) {
       generator(res, context, fields);
@@ -250,6 +301,24 @@ class ClassGenerator {
     } else {
       print('Not registering class: $name');
     }
+  }
+
+  /// Mutates [name] so it doesn't clash with any key in [json], by appending a
+  /// number to the end. The new name is returned to use.
+  String nonClashingFieldName(Map<String, dynamic> json, String name) {
+    if (!json.keys.contains(name)) {
+      return name;
+    }
+
+    return nonClashingFieldName(json, '${name}1');
+  }
+
+  /// Removes the initial `.` of a json path
+  String cleanPath(String jsonPath) {
+    if (jsonPath.startsWith('.')) {
+      return jsonPath.substring(1);;
+    }
+    return jsonPath;
   }
 
   /// Returns if a new class should be created.
@@ -276,7 +345,8 @@ class ClassGenerator {
     return pascal(validateClassName(name));
   }
 
-  /// Transforms a class name if necessary.
+  /// Transforms a class name if necessary. Replaces non alphanumeric (and
+  /// underscores) characters with underscores.
   String validateClassName(String name) => nameTransformer(name);
 
   /// Transforms an array class name if necessary.
@@ -305,9 +375,11 @@ class GeneratorSettings {
   final Map<String, String> staticNameTransformer;
   final Map<String, String> staticArrayTransformer;
   final Map<String, String> staticArrayFieldTransformer;
+  final List<String> forceObjectCounting;
 
   /// Creates a [GeneratorSettings] with the default values.
-  factory GeneratorSettings.defaultSettings() => GeneratorSettings(
+  factory GeneratorSettings.defaultSettings() =>
+      GeneratorSettings(
         className: 'BaseClass',
         childrenRequireAggregation: false,
         forceBaseClasses: false,
@@ -318,34 +390,35 @@ class GeneratorSettings {
         staticNameTransformer: const {},
         staticArrayTransformer: const {},
         staticArrayFieldTransformer: const {},
+        forceObjectCounting: const [],
       );
 
   /// Creates a [GeneratorSettings] with all null values. Suggested as the
   /// second parameter for [GeneratorSettings.mergeSettings] (So the fallback
   /// can set default values)
-  const GeneratorSettings(
-      {this.className,
-      this.url,
-      this.method,
-      this.childrenRequireAggregation,
-      this.forceBaseClasses,
-      this.ignoreBase,
-      this.formatOutput,
-      this.extraGenerators,
-      this.shareClasses,
-      this.finalizeFields,
-      this.commentGenerator,
-      this.nameTransformer,
-      this.arrayTransformer,
-      this.arrayFieldTransformer,
-      this.staticNameTransformer,
-      this.staticArrayTransformer,
-      this.staticArrayFieldTransformer});
+  const GeneratorSettings({this.className,
+    this.url,
+    this.method,
+    this.childrenRequireAggregation,
+    this.forceBaseClasses,
+    this.ignoreBase,
+    this.formatOutput,
+    this.extraGenerators,
+    this.shareClasses,
+    this.finalizeFields,
+    this.commentGenerator,
+    this.nameTransformer,
+    this.arrayTransformer,
+    this.arrayFieldTransformer,
+    this.staticNameTransformer,
+    this.staticArrayTransformer,
+    this.staticArrayFieldTransformer,
+    this.forceObjectCounting});
 
   /// Creates a [GeneratorSettings] with the same values as [merging] but in
   /// the case of null values, using [fallback].
-  factory GeneratorSettings.mergeSettings(
-          GeneratorSettings merging, GeneratorSettings fallback) =>
+  factory GeneratorSettings.mergeSettings(GeneratorSettings merging,
+      GeneratorSettings fallback) =>
       GeneratorSettings(
         className: merging.className ?? fallback.className,
         url: merging.url ?? fallback.url,
@@ -362,13 +435,15 @@ class GeneratorSettings {
         nameTransformer: merging.nameTransformer ?? fallback.nameTransformer,
         arrayTransformer: merging.arrayTransformer ?? fallback.arrayTransformer,
         arrayFieldTransformer:
-            merging.arrayFieldTransformer ?? fallback.arrayFieldTransformer,
+        merging.arrayFieldTransformer ?? fallback.arrayFieldTransformer,
         staticNameTransformer:
-            merging.staticNameTransformer ?? fallback.staticNameTransformer,
+        merging.staticNameTransformer ?? fallback.staticNameTransformer,
         staticArrayTransformer:
-            merging.staticArrayTransformer ?? fallback.staticArrayTransformer,
+        merging.staticArrayTransformer ?? fallback.staticArrayTransformer,
         staticArrayFieldTransformer: merging.staticArrayFieldTransformer ??
             fallback.staticArrayFieldTransformer,
+        forceObjectCounting: merging.forceObjectCounting ??
+            fallback.forceObjectCounting,
       );
 
   /// The same as merging settings with the [merging] be [newValues] and the
@@ -394,6 +469,7 @@ class GeneratorSettings {
     Map<String, String> staticNameTransformer,
     Map<String, String> staticArrayTransformer,
     Map<String, String> staticArrayFieldTransformer,
+    List<String> forceObjectCounting,
   }) =>
       GeneratorSettings.mergeSettings(
           GeneratorSettings(
@@ -414,6 +490,7 @@ class GeneratorSettings {
             staticNameTransformer: staticNameTransformer,
             staticArrayTransformer: staticArrayTransformer,
             staticArrayFieldTransformer: staticArrayFieldTransformer,
+            forceObjectCounting: forceObjectCounting,
           ),
           this);
 }
@@ -428,7 +505,10 @@ class ClassContext {
   /// The HTTP method in the request.
   final String method;
 
-  ClassContext(this.name, this.url, this.method);
+  /// The json path of the class
+  final String jsonPath;
+
+  ClassContext(this.name, this.url, this.method, this.jsonPath);
 }
 
 class ElementInfo {
@@ -440,14 +520,17 @@ class ElementInfo {
 
   final ElementType type;
   final ElementInfo arrayInfo;
+  final bool countingKey;
 
   /// Sets the base [type]. If the type is an [ElementType.Array], [arrayInfo]
   /// must be set to the info of the array.
   /// The [name] is the name in the JSON the field is. [dartName] is by default
   /// the [jsonName] ran through [camel].
+  /// [countingKey] is true if the field is generated and should not be
+  /// normally serialized.
   ElementInfo(this.type,
-      {this.jsonName = '', String dartName, this.arrayInfo, this.objectName})
-      : dartName = dartName ?? camel(jsonName);
+      {this.jsonName = '', String dartName, this.arrayInfo, this.objectName, this.countingKey = false})
+      : dartName = dartName ?? camel(verifyDartName(jsonName));
 
   /// Creates an [ElementInfo] from a given [element].
   /// The [name] is the real variable name.
@@ -458,12 +541,13 @@ class ElementInfo {
   /// classes.
   /// If [singleElement] is unset, [forceType] must be set.
   factory ElementInfo.fromElement(ClassGenerator classGenerator,
+      String jsonPath,
       {dynamic singleElement,
-      List listElement = const [],
-      String jsonName = '',
-      bool forceSeparateArrays = false,
-      ElementType forceType,
-      String dartName}) {
+        List listElement = const [],
+        String jsonName = '',
+        bool forceSeparateArrays = false,
+        ElementType forceType,
+        String dartName}) {
     if (listElement.isEmpty) {
       listElement = [singleElement, ...listElement];
     }
@@ -477,11 +561,12 @@ class ElementInfo {
     if (type == ElementType.Object) {
       if (classGenerator.createNewClass(jsonName)) {
         var typeName = classGenerator.createClassName(jsonName);
-        classGenerator.classVisitor(typeName, aggregate(listElement));
+        classGenerator.classVisitor(
+            typeName, aggregate(listElement), '$jsonPath.$jsonName');
       }
 
       var typeName =
-          classGenerator.createClassName(jsonName, respectOverflow: false);
+      classGenerator.createClassName(jsonName, respectOverflow: false);
       return ElementInfo(type,
           jsonName: jsonName, objectName: typeName, dartName: dartName);
     }
@@ -493,7 +578,8 @@ class ElementInfo {
         throw 'element must not be null when dealing with arrays';
       }
 
-      var arrayType = getArrayType(classGenerator, creatingName, element);
+      var arrayType = getArrayType(
+          classGenerator, creatingName, jsonPath, element);
 
       if (forceSeparateArrays) {
         // Create the outer containing class
@@ -506,9 +592,10 @@ class ElementInfo {
         // If the array's type is an Object, create the inner object
         if (arrayType.type == ElementType.Object) {
           classGenerator.classVisitor(
-              creatingName, aggregate(listElement.first));
+              creatingName, aggregate(listElement.first), '$jsonPath.[]');
 
-          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
+          classGenerator.classVisitor(
+              containingTypeName, {}, '$jsonPath.[]', extraFields: [
             ElementInfo(ElementType.Array,
                 jsonName: jsonName,
                 arrayInfo: ElementInfo(ElementType.Object,
@@ -517,17 +604,19 @@ class ElementInfo {
         } else {
           // If it's a normal array, simply make the class with an array
           classGenerator.classVisitor(creatingName,
-              <String, dynamic>{jsonName: <Map<String, dynamic>>[]});
+              <String, dynamic>{jsonName: <Map<String, dynamic>>[]},
+              '$jsonPath.[]');
 
-          classGenerator.classVisitor(containingTypeName, {}, extraFields: [
-            ElementInfo.fromElement(classGenerator,
+          classGenerator.classVisitor(
+              containingTypeName, {}, '$jsonPath.[]', extraFields: [
+            ElementInfo.fromElement(classGenerator, '$jsonPath.[]',
                 singleElement: element, jsonName: jsonName),
           ]);
         }
       }
 
       var typeName =
-          classGenerator.createClassName(creatingName, respectOverflow: false);
+      classGenerator.createClassName(creatingName, respectOverflow: false);
       return ElementInfo(type,
           jsonName: creatingName,
           objectName: typeName,
@@ -542,8 +631,8 @@ class ElementInfo {
   /// of a [List]). If there is mismatched types (e.g. number with strings,
   /// numbers with objects, etc.) [ElementType.Mixed] is returned. If the array
   /// is empty, [ElementType.Unknown] is returned.
-  static ElementInfo getArrayType(
-      ClassGenerator classGenerator, String jsonName, List list) {
+  static ElementInfo getArrayType(ClassGenerator classGenerator,
+      String jsonName, String jsonPath, List list) {
     var types = list.map((e) => e.runtimeType).toSet();
 
     if (types.isEmpty) {
@@ -551,7 +640,7 @@ class ElementInfo {
     }
 
     if (types.length == 1) {
-      return ElementInfo.fromElement(classGenerator,
+      return ElementInfo.fromElement(classGenerator, '$jsonPath.[]',
           jsonName: jsonName, listElement: list);
     }
 
@@ -559,8 +648,9 @@ class ElementInfo {
   }
 
   @override
-  String toString() =>
-      'ElementInfo{jsonName: $jsonName, dartName: $dartName, objectName: $objectName, type: $type, arrayInfo: $arrayInfo}';
+  String toString() {
+    return 'ElementInfo{jsonName: $jsonName, dartName: $dartName, objectName: $objectName, type: $type, arrayInfo: $arrayInfo, countingKey: $countingKey}';
+  }
 }
 
 class ElementType {
@@ -576,7 +666,7 @@ class ElementType {
       primitive: false,
       valueTest: (e) => e is List,
       generateTypeString: GenerateSimpleCode((dartName, info) =>
-          'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
+      'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
       generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
         var arrayType = info.arrayInfo.type;
         if (arrayType.primitive ||
@@ -586,10 +676,11 @@ class ElementType {
         }
 
         var e = generateTempVar('e', depth);
-        return '\$.map(($e) => ${arrayType.generateToJson(info.arrayInfo).replaceAll('\$', e)}).toList()';
+        return '\$.map(($e) => ${arrayType.generateToJson(info.arrayInfo)
+            .replaceAll('\$', e)}).toList()';
       }),
       generateFromJson:
-          GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+      GenerateJsonSidedCode((jsonName, dartName, info, depth) {
         var arrayType = info.arrayInfo.type;
         if (arrayType.primitive) {
           if (arrayType == ElementType.Mixed ||
@@ -602,7 +693,8 @@ class ElementType {
         }
 
         var e = generateTempVar('e', depth);
-        return '(\$ as List).map(($e) => ${arrayType.generateFromJson(info.arrayInfo, depth + 1).replaceAll('\$', e)}).toList()';
+        return '(\$ as List).map(($e) => ${arrayType.generateFromJson(
+            info.arrayInfo, depth + 1).replaceAll('\$', e)}).toList()';
       }));
 
   /// This is a placeholder for new classes being created
@@ -610,11 +702,31 @@ class ElementType {
       primitive: false,
       valueTest: (v) => v is Map,
       generateTypeString:
-          GenerateSimpleCode((dartName, info) => info.objectName),
+      GenerateSimpleCode((dartName, info) => info.objectName),
       generateToJson:
-          GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$.toJson()'),
+      GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$.toJson()'),
       generateFromJson: GenerateJsonSidedCode(
-          (jsonName, dartName, info, _) => '${info.objectName}.fromJson(\$)'));
+              (jsonName, dartName, info, _) => '${info
+              .objectName}.fromJson(\$)'));
+
+  static final KeyedObject = ElementType._('KeyedObject',
+      primitive: false,
+      valueTest: (_) => false,
+      generateTypeString: GenerateSimpleCode((dartName, info) =>
+        'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
+      generateToJson: GenerateJsonSidedCode((jsonName, dartName, info,
+          depth) {
+        var e = generateTempVar('e', depth);
+        return 'Map.fromIterables(\$.map(($e) => $e.getKey()), \$.map(($e) => ${info.arrayInfo.type.generateToJson(
+            info.arrayInfo, depth + 1).replaceAll('\$', e)}))';
+      }),
+      generateFromJson: GenerateJsonSidedCode((jsonName, dartName, info,
+          depth) {
+        var e = generateTempVar('e', depth);
+        return 'json.keys.map(($e) => ${info.arrayInfo.type.generateFromJson(
+          info.arrayInfo, depth + 1).replaceAll('\$', '$e, json[$e]')}).toList()';
+      })
+  );
 
   /// Used for objects with no defined type, i.e. empty arrays' types.
   static final Unknown = ElementType._('Unknown',
@@ -692,16 +804,16 @@ class ElementType {
   /// ```
   ElementType._(this.name,
       {this.primitive = true,
-      bool Function(dynamic value) valueTest,
-      Type type,
-      core.String typeString,
-      this.generateTypeString,
-      this.generate,
-      this.generateToJson,
-      this.generateFromJson})
+        bool Function(dynamic value) valueTest,
+        Type type,
+        core.String typeString,
+        this.generateTypeString,
+        this.generate,
+        this.generateToJson,
+        this.generateFromJson})
       : _typeTest = valueTest ?? ((value) => value.runtimeType == type) {
     generate ??= GenerateSimpleCode(
-        (dartName, info) => '${generateTypeString(info)} $dartName;');
+            (dartName, info) => '${generateTypeString(info)} $dartName;');
     generateTypeString ??=
         GenerateSimpleCode((dartName, _) => typeString ?? type?.toString());
     generateToJson ??=
@@ -714,9 +826,10 @@ class ElementType {
   bool test(dynamic value) => _typeTest(value);
 
   /// Gets the first matching [ElementType] for the given [value].
-  static ElementType getType(dynamic value) => value == null
-      ? null
-      : Precedence.firstWhere((element) => element.test(value));
+  static ElementType getType(dynamic value) =>
+      value == null
+          ? null
+          : Precedence.firstWhere((element) => element.test(value));
 
   @override
   core.String toString() => 'ElementType{name: $name}';
@@ -789,9 +902,11 @@ Map<String, dynamic> aggregate(List<dynamic> data) {
   return simpleAggregate<String, dynamic>(data);
 }
 
-Map<K, V> simpleAggregate<K, V>(List<dynamic> data) => data
-    .cast<Map<K, V>>()
-    .fold(<K, V>{}, (previousValue, element) => {...previousValue, ...element});
+Map<K, V> simpleAggregate<K, V>(List<dynamic> data) =>
+    data
+        .cast<Map<K, V>>()
+        .fold(
+        <K, V>{}, (previousValue, element) => {...previousValue, ...element});
 
 /// Aggregates multiple (usually response) objects into one. This only works
 /// with a list inside of a list, combining all inner lists. For example, an
@@ -828,33 +943,35 @@ Map<K, V> simpleAggregate<K, V>(List<dynamic> data) => data
 ///   ]
 /// }
 /// ```
-Map<String, dynamic> doubleAggregate(
-        Map<String, dynamic> map) =>
+Map<String, dynamic> doubleAggregate(Map<String, dynamic> map) =>
     Map.fromIterables(
         map.keys,
-        map.keys.map((key) => (map[key] as List)
-            .cast<List>()
-            .map((e) => e.cast<Map<String, dynamic>>())
-            .map((e) => mergeDeep(e))
-            .toList()));
+        map.keys.map((key) =>
+            (map[key] as List)
+                .cast<List>()
+                .map((e) => e.cast<Map<String, dynamic>>())
+                .map((e) => mergeDeep(e))
+                .toList()));
 
 Map<String, dynamic> mergeDeep(List<Map<String, dynamic>> objects) {
-  return objects.reduce((prev, obj) {
-    obj.keys.forEach((key) {
-      var pVal = prev[key];
-      var oVal = obj[key];
+  return {...objects.reduce((prev, obj) {
+      prev = {...prev};
+      obj.keys.forEach((key) {
+        var pVal = prev[key];
+        var oVal = obj[key];
 
-      if (pVal is List && oVal is List) {
-        prev[key] = [...pVal, ...oVal];
-      } else if (pVal is Map && oVal is Map) {
-        prev[key] = mergeDeep([pVal, oVal]);
-      } else {
-        prev[key] = oVal;
-      }
-    });
+        if (pVal is List && oVal is List) {
+          prev[key] = [...pVal, ...oVal];
+        } else if (pVal is Map && oVal is Map) {
+          prev[key] = mergeDeep([pVal, oVal]);
+        } else {
+          prev[key] = oVal;
+        }
+      });
 
-    return prev;
-  });
+      return prev;
+    })
+  };
 }
 
 /// Transforms the keys of the map to lowercase.
@@ -874,6 +991,9 @@ String pascal(String string) => ReCase(makeValid(string)).pascalCase;
 
 /// Formats a string into snake-case
 String snake(String string) => ReCase(makeValid(string)).snakeCase;
+
+/// Removes all invalid characters to be used in a Dart name.
+String verifyDartName(String name) => name.replaceAll(RegExp(r'[^\w]'), '_');
 
 /// Takes in a potentially invalid name and makes it valid for Dart classes
 /// or fields. e.g. if `1` is supplied, `Num1` is returned.

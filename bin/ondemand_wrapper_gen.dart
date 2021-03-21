@@ -35,9 +35,27 @@ void main(List<String> arguments) {
   // groupEntries(bruh, (url) => )
 
   var allowedUrls = [
-    'https://ondemand.rit.edu/api/config',
-    'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
-    'https://ondemand.rit.edu/api/sites/1312'
+    // 'https://ondemand.rit.edu/api/config',
+    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
+    // 'https://ondemand.rit.edu/api/sites/1312',
+    // 'https://ondemand.rit.edu/static/assets/manifest.json'
+    'https://ondemand.rit.edu/api/userProfile/decryptSamlCookie',
+    // 'https://ondemand.rit.edu/api/sites/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getKitchenLeadTimeForStores',
+    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162',
+    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162/menus/3403',
+    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b87df',
+    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b8822',
+    // 'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders',
+    // 'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders/5e446350-e67d-4ec3-a348-2393ccc63691',
+    // 'https://ondemand.rit.edu/api/atrium/accountInquiry',
+    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getRevenueCategory',
+    // 'https://ondemand.rit.edu/api/atrium/getAtriumTendersFromPaymentTypeList',
+    // 'https://ondemand.rit.edu/api/order/getPaymentTenderInfo',
+    // 'https://ondemand.rit.edu/api/atrium/authAtriumPayment',
+    // 'https://ondemand.rit.edu/api/order/capacityCheck',
+    // 'https://ondemand.rit.edu/api/order/createMultiPaymentClosedOrder',
+    // 'https://ondemand.rit.edu/api/communication/getSMSReceipt',
+    // 'https://ondemand.rit.edu/api/communication/sendSMSReceipt',
   ];
 
   for (var url in bruh.keys) {
@@ -57,11 +75,25 @@ void main(List<String> arguments) {
         'Response': 'FoodItem',
         'ChildGroups': 'ChildGroup',
         'ItemImages': 'ItemImage',
+        'PriceLevelsNum': 'PriceLevel'
       }, staticArrayTransformer: {
         'Response': 'ItemList'
       }, staticArrayFieldTransformer: {
         'Response': 'items',
-      }, commentGenerator: defaultCommentGenerator(['Request', 'ItemList']));
+      }, commentGenerator: defaultCommentGenerator(['Request', 'ItemList']),
+      forceObjectCounting: [
+        '[].response.priceLevels'
+      ]);
+    } else if (url.endsWith('1312')) {
+      settings = defaultConfig.copyWith(
+        staticNameTransformer:  {
+          'ConceptEntriesNum': 'ConceptEntry',
+          'TendersNum': 'Tender'
+        },
+          forceObjectCounting: [
+        '[].response.pickUpConfig.conceptEntries',
+        '[].response.atriumConfig.tenders'
+      ]);
     }
 
     var name = snake(url.substring(url.lastIndexOf('/')));
@@ -95,6 +127,7 @@ String generate(Map<String, List<Entry>> allData, String name, String url,
   var method = getMethod(allData, url);
   var gen =
       ClassGenerator.fromSettings(settings.copyWith(url: url, method: method));
+  print(prettyEncode(aggregated));
   return gen.generated(aggregated);
 }
 
@@ -102,15 +135,24 @@ String getMethod(Map<String, List<Entry>> allData, String url) =>
     allData[url].first.request.method;
 
 BlockCommentGenerator defaultCommentGenerator(
-        [List<String> commentClasses = const ['Request', 'Response']]) =>
+        [List<String> detailedCommentClasses = const ['Request', 'Response']]) =>
     (context) {
-      if (!commentClasses.contains(context.name)) {
-        return null;
-      }
 
-      return '''
+  var details = '';
+
+  if (detailedCommentClasses.contains(context.name)) {
+    details = '''
   Url: ${context.url}
   Method: ${context.method}
+  
+  ''';
+  }
+
+  return '''$details
+  Json path:
+  ```
+  ${context.jsonPath}
+  ```
   ''';
     };
 

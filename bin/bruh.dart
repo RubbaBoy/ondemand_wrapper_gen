@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:ondemand_wrapper_gen/generator.dart';
+import 'package:ondemand_wrapper_gen/gen/test.g.dart' as test;
 
 void main(List<String> args) {
   var input = '''
@@ -33,54 +34,56 @@ void main(List<String> args) {
             {"ok": "and"},
             {"bruh": "moment"}
         ]
-    ]
-}
-    ''';
-
-  input = '''
-{
-    "responses": [
-        [
-            {"id": "id", "name":  "name"}
-        ],
-        [
-            {"id": "id1", "name":  "name1"},
-            {"id": "id2", "name":  "name2"}
-        ],
-        [
-            {"id": "id3", "name":  "name3"},
-            {"id": "id4", "name":  "name4"},
-            {"id": "id5", "name":  "name5"}
-        ]
     ],
-    "otherrrrr": [
-        [
-            {"i2d": "id", "name":  "name"}
-        ],
-        [
-            {"i2d": "id1", "name":  "name1"},
-            {"i2d": "id2", "name":  "name2"}
-        ],
-        [
-            {"i2d": "id3", "name":  "name3"},
-            {"i2d": "id4", "name":  "name4"},
-            {"i2d": "id5", "name":  "name5"}
-        ]
-    ]
+    "shit": {
+      "1": {
+        "name": "foo",
+        "bruh": "moment"
+      },
+      "2": {
+        "name": "bar"
+      }
+    }
 }
     ''';
 
   var json = jsonDecode(input);
 
-  print('before: $json');
+  // var shit = json['shit'] as Map<String, dynamic>;
+
+  // shit.keys.map((key) => ShitObj.fromJson(key, shit[key]));
+
   // print('one: ${jsonEncode(aggregateMultiple(json))}');
   // print('after: ${aggregate(json)}');
 
   // var ondemandInput = jsonDecode(File('E:\\ondemand_fiddler\\ondemand-1.har').readAsStringSync());
 
-  // var gen = ClassGenerator(className: 'base', childrenRequireAggregation: true, json: json);
-  // print(gen.generated());
+  // List<Bruh> list;
+
+  // Map.fromIterables(list.map((e) => e.key), list.map((e) => e.toJson()));
+
+  var gen = ClassGenerator.fromSettings(GeneratorSettings.defaultSettings().copyWith(
+      childrenRequireAggregation: false,
+      forceBaseClasses: false,
+    forceObjectCounting: ['shit']
+  ));
+  print(gen.generated(json));
   // var gen = ClassGenerator(className: 'base', json: ondemandInput);
   // var outFile = File(r'E:\ondemand_wrapper_gen\lib\gen.g.dart');
   // outFile.writeAsString(gen.generated());
+
+  // var tttt = man.keys.map((e) {
+  //   print('e = $e j = ${json[e]}');
+  //   return test.ShitNum.fromJson(e, json[e]);
+  // }).toList();
+
+  // print('ttt = $tttt');
+
+  var base = test.BaseClass.fromJson(json);
+  var shit = base.shit;
+  for (var t in shit.shit) {
+    print('${t.key}: name: ${t.name} bruh: ${t.bruh}');
+  }
+
+  print('\nJSON:${jsonEncode(shit.toJson())}');
 }

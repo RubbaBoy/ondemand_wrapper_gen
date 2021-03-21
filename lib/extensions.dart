@@ -20,7 +20,7 @@ extension MapUtility<K, V> on Map<K, V> {
       map((k, v) => MapEntry(k, transform(k, v)));
 }
 
-extension ListUtility<E> on List<E> {
+extension ListUtility<E> on Iterable<E> {
   void forEachI(void Function(int index, E element) action) {
     var i = 0;
     forEach((e) => action(i++, e));

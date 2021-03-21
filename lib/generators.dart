@@ -34,8 +34,16 @@ void constructorGenerator(
 
 void fromJson(
     StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
-  if (jsonType == JsonType.Object) {
-    buffer.write('${context.name}.fromJson(Map<String, dynamic> json)');
+  if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
+
+    buffer.write('${context.name}.fromJson(');
+
+    if (jsonType == JsonType.KeyedObject) {
+      var countingKey = fields.firstWhere((field) => field.countingKey, orElse: () => throw 'No counting key found in KeyedObject!');
+      buffer.write('this.${countingKey.dartName}, ');
+    }
+
+    buffer.write('Map<String, dynamic> json)');
 
     if (fields.isEmpty) {
       buffer.writeln(';');
@@ -43,7 +51,7 @@ void fromJson(
     }
 
     buffer.writeln(' :');
-    fields.forEachI((index, info) {
+    fields.where((field) => !field.countingKey).forEachI((index, info) {
       if (index != 0) {
         buffer.write(',\n');
       }
@@ -69,9 +77,9 @@ void fromJson(
 
 void toJson(
     StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
-  if (jsonType == JsonType.Object) {
+  if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
     buffer.writeln('Map<String, dynamic> toJson() => {');
-    fields.forEachI((index, info) {
+    fields.where((field) => !field.countingKey).forEachI((index, info) {
       if (index != 0) {
         buffer.write(',\n');
       }
@@ -87,9 +95,20 @@ void toJson(
   }
 }
 
+void getKey(
+    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
+  if (jsonType == JsonType.KeyedObject) {
+    buffer.write('String getKey() => ');
+    buffer.write(fields.firstWhere((field) => field.countingKey, orElse: () => throw 'No counting key found in KeyedObject!').dartName);
+    buffer.writeln(';');
+  }
+}
+
 enum JsonType {
   /// For base objects of `Map<String, dynamic>`
   Object,
+  /// For objects that need to accept keys into them
+  KeyedObject,
   /// For base objects of `List<Map<String, dynamic>>`
   Array
 }

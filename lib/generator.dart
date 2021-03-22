@@ -45,9 +45,6 @@ class ClassGenerator {
   /// separate the name and any appendation it with an underscore.
   NameTransformer arrayTransformer;
 
-  /// Allows the mutation of single-field array classes' names.
-  NameTransformer arrayFieldTransformer;
-
   /// If [true], classes will be shared among field names. If [false], unique
   /// classes will be created no matter the field repetition.
   ///
@@ -83,8 +80,6 @@ class ClassGenerator {
   /// [nameTransformer], replacing the key names with the values.
   /// The [staticArrayTransformer] takes precedence over the supplied or
   /// default [arrayTransformer], replacing the key names with the values.
-  /// The [staticArrayFieldTransformer] takes precedence over the supplied or
-  /// default [arrayFieldTransformer], replacing the key names with the values.
   /// [childrenRequireAggregation] must be set to true if the input is in the
   /// form of members with arrays of multiple responses. This simply invokes
   /// [aggregateMultiple] on each field of the input JSON before conversion.
@@ -106,29 +101,17 @@ class ClassGenerator {
     this.commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
-    NameTransformer arrayFieldTransformer,
     Map<String, String> staticNameTransformer = const {},
     Map<String, String> staticArrayTransformer = const {},
-    Map<String, String> staticArrayFieldTransformer = const {},
     this.forceObjectCounting = const [],
   }) : formatOutput = formatOutput ?? _formatter.format {
     var backupNameTransformer = nameTransformer ?? identitySecond;
-    this.nameTransformer = (path, name) {
-      print('$path => $name (${staticNameTransformer[path]})');
-      return staticNameTransformer[path] ?? backupNameTransformer(path, name);
-    };
+    this.nameTransformer = (path, name) => staticNameTransformer[path] ?? backupNameTransformer(path, name);
 
     var backupArrayTransformer =
         arrayTransformer ?? (_, name) => name + '_array';
     this.arrayTransformer = (path, name) =>
         staticArrayTransformer[path] ?? backupArrayTransformer(path, name);
-
-    var backupArrayFieldTransformer = arrayFieldTransformer ?? identitySecond;
-    this.arrayFieldTransformer = (path, name) {
-      // print('$path => $name (${staticArrayFieldTransformer[path]})');
-      return staticArrayFieldTransformer[path] ??
-          backupArrayFieldTransformer(path, name);
-    };
   }
 
   factory ClassGenerator.fromSettings(GeneratorSettings settings) =>
@@ -146,10 +129,8 @@ class ClassGenerator {
           commentGenerator: settings.commentGenerator,
           nameTransformer: settings.nameTransformer,
           arrayTransformer: settings.arrayTransformer,
-          arrayFieldTransformer: settings.arrayFieldTransformer,
           staticNameTransformer: settings.staticNameTransformer,
           staticArrayTransformer: settings.staticArrayTransformer,
-          staticArrayFieldTransformer: settings.staticArrayFieldTransformer,
           forceObjectCounting: settings.forceObjectCounting);
 
   String generated(Map<String, dynamic> json) {
@@ -165,7 +146,6 @@ class ClassGenerator {
         }
         var list = value as List;
         var first = list.isNotEmpty ? list.first : null;
-        print('first: ${first.runtimeType}');
         if (first is Map) {
           if (first.isEmpty) {
             redone = <String, dynamic>{};
@@ -173,15 +153,11 @@ class ClassGenerator {
             redone = aggregate(list);
           }
         } else if (first is List) {
-          // print('REDONE ==============');
-          // print(prettyEncode(first));
           var firstEntry = doubleAggregate({key: list}).entries.first;
           var firstList = firstEntry.value as List;
           redone = {
             firstEntry.key: [mergeDeep(firstList.cast<Map<String, dynamic>>())]
           };
-          // print('REDONE ==============');
-          // print(prettyEncode(redone));
           requireArray = true;
         }
         return MapEntry(key, MapEntry(redone, requireArray));
@@ -195,8 +171,6 @@ class ClassGenerator {
         var className = requireArray
             ? validateArrayClassName(jsonName, jsonName)
             : jsonName;
-
-        // print('key = ${entry.key}');
 
         classVisitor(className, entry.key, jsonName,
             base: true, forceBaseClasses: false, arrayClass: requireArray);
@@ -283,7 +257,7 @@ class ClassGenerator {
         var jsonName = entry.key;
         var dartName;
         if (arrayClass) {
-          dartName = validateArrayFieldName('$jsonPath#$jsonName', jsonName);
+          dartName = validateClassName('$jsonPath#$jsonName', jsonName);
         }
 
         fields.add(ElementInfo.fromElement(this, jsonPath,
@@ -374,10 +348,6 @@ class ClassGenerator {
   /// Transforms an array class name if necessary.
   String validateArrayClassName(String path, String name) =>
       arrayTransformer(path, name);
-
-  /// Transforms an array field name if necessary.
-  String validateArrayFieldName(String path, String name) =>
-      arrayFieldTransformer(path, name);
 }
 
 /// The settings for [ClassGenerator]s.
@@ -395,10 +365,8 @@ class GeneratorSettings {
   final BlockCommentGenerator commentGenerator;
   final NameTransformer nameTransformer;
   final NameTransformer arrayTransformer;
-  final NameTransformer arrayFieldTransformer;
   final Map<String, String> staticNameTransformer;
   final Map<String, String> staticArrayTransformer;
-  final Map<String, String> staticArrayFieldTransformer;
   final List<String> forceObjectCounting;
 
   /// Creates a [GeneratorSettings] with the default values.
@@ -412,7 +380,6 @@ class GeneratorSettings {
         finalizeFields: true,
         staticNameTransformer: const {},
         staticArrayTransformer: const {},
-        staticArrayFieldTransformer: const {},
         forceObjectCounting: const [],
       );
 
@@ -433,10 +400,8 @@ class GeneratorSettings {
       this.commentGenerator,
       this.nameTransformer,
       this.arrayTransformer,
-      this.arrayFieldTransformer,
       this.staticNameTransformer,
       this.staticArrayTransformer,
-      this.staticArrayFieldTransformer,
       this.forceObjectCounting});
 
   /// Creates a [GeneratorSettings] with the same values as [merging] but in
@@ -458,14 +423,10 @@ class GeneratorSettings {
         commentGenerator: merging.commentGenerator ?? fallback.commentGenerator,
         nameTransformer: merging.nameTransformer ?? fallback.nameTransformer,
         arrayTransformer: merging.arrayTransformer ?? fallback.arrayTransformer,
-        arrayFieldTransformer:
-            merging.arrayFieldTransformer ?? fallback.arrayFieldTransformer,
         staticNameTransformer:
             merging.staticNameTransformer ?? fallback.staticNameTransformer,
         staticArrayTransformer:
             merging.staticArrayTransformer ?? fallback.staticArrayTransformer,
-        staticArrayFieldTransformer: merging.staticArrayFieldTransformer ??
-            fallback.staticArrayFieldTransformer,
         forceObjectCounting:
             merging.forceObjectCounting ?? fallback.forceObjectCounting,
       );
@@ -489,10 +450,8 @@ class GeneratorSettings {
     BlockCommentGenerator commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
-    NameTransformer arrayFieldTransformer,
     Map<String, String> staticNameTransformer,
     Map<String, String> staticArrayTransformer,
-    Map<String, String> staticArrayFieldTransformer,
     List<String> forceObjectCounting,
   }) =>
       GeneratorSettings.mergeSettings(
@@ -510,10 +469,8 @@ class GeneratorSettings {
             commentGenerator: commentGenerator,
             nameTransformer: nameTransformer,
             arrayTransformer: arrayTransformer,
-            arrayFieldTransformer: arrayFieldTransformer,
             staticNameTransformer: staticNameTransformer,
             staticArrayTransformer: staticArrayTransformer,
-            staticArrayFieldTransformer: staticArrayFieldTransformer,
             forceObjectCounting: forceObjectCounting,
           ),
           this);
@@ -604,8 +561,6 @@ class ElementInfo {
 
     var type = ElementType.getType(element) ?? forceType;
 
-    // print('Creating "$jsonName" of type: $type');
-
     if (type == ElementType.Object) {
       var path = '$jsonPath.$jsonName';
       if (classGenerator.createNewClass(jsonName)) {
@@ -632,8 +587,6 @@ class ElementInfo {
 
       var arrayType =
           getArrayType(classGenerator, creatingName, jsonPath, element);
-
-      print('$jsonPath = $arrayType creat8ingName = $creatingName');
 
       if (forceSeparateArrays) {
         // Create the outer containing class
@@ -885,7 +838,7 @@ class ElementType {
 
   /// Gets the first matching [ElementType] for the given [value].
   static ElementType getType(dynamic value) => value == null
-      ? null
+      ? ElementType.Unknown
       : Precedence.firstWhere((element) => element.test(value));
 
   @override

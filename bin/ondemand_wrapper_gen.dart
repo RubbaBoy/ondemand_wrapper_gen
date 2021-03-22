@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generator.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
-import 'package:ondemand_wrapper_gen/utility.dart';
 
 typedef CreateGenerator = ClassGenerator Function(
     Map<String, dynamic> json, String method);
@@ -32,8 +31,6 @@ void main(List<String> arguments) {
   var generateDirectory = [r'E:\ondemand_wrapper_gen\lib\gen'].directory;
   generateDirectory.createSync();
 
-  // groupEntries(bruh, (url) => )
-
   var allowedUrls = <dynamic>[
     // 'https://ondemand.rit.edu/api/config',
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
@@ -48,7 +45,7 @@ void main(List<String> arguments) {
 //       'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b8822'
 //     ],
 
-    'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders',
+    // 'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders',
     // 'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders/5e446350-e67d-4ec3-a348-2393ccc63691',
     // 'https://ondemand.rit.edu/api/atrium/accountInquiry',
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getRevenueCategory',
@@ -58,15 +55,8 @@ void main(List<String> arguments) {
     // 'https://ondemand.rit.edu/api/order/capacityCheck',
     // 'https://ondemand.rit.edu/api/order/createMultiPaymentClosedOrder',
     // 'https://ondemand.rit.edu/api/communication/getSMSReceipt',
-    // 'https://ondemand.rit.edu/api/communication/sendSMSReceipt',
+    'https://ondemand.rit.edu/api/communication/sendSMSReceipt',
   ];
-
-  // var entry = bruh['https://ondemand.rit.edu/api/sites/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getKitchenLeadTimeForStores'].first;
-  // var responseJson = entry.request.postData.json;
-  // print('request =');
-  // print(prettyEncode(responseJson));
-  //
-  // if (true) return;
 
   for (var got in allowedUrls) {
     var urls = <String>[];
@@ -87,18 +77,13 @@ void main(List<String> arguments) {
     if (firstUrl.endsWith('get-items')) {
       settings = defaultConfig.copyWith(
           staticNameTransformer: {
-            // 'response': 'FoodItem',
             'response.response': 'FoodItem',
             'response.response.childGroups': 'ChildGroup',
             'response.response.itemImages': 'ItemImage',
-            'response.response.priceLevels': 'PriceLevel'
-          },
-          staticArrayTransformer: {
-            'response': 'Response'
-          },
-          staticArrayFieldTransformer: {
+            'response.response.priceLevels': 'PriceLevel',
             'response#response': 'items',
           },
+          staticArrayTransformer: {'response': 'Response'},
           commentGenerator: defaultCommentGenerator(['Request', 'ItemList']),
           forceObjectCounting: ['response.response.priceLevels']);
     } else if (firstUrl.endsWith('1312')) {
@@ -114,26 +99,77 @@ void main(List<String> arguments) {
         'response[]': 'Kitchen',
         'request.request': 'KitchenRequest',
         'request': 'Request',
-        'response#response': 'kitchens'
-        // 'response'
-      }, staticArrayFieldTransformer: {
+        'response#response': 'kitchens',
         'response': 'kitchens',
         'request#request': 'kitchenRequests'
       }, forceObjectCounting: [
         'response'
       ]);
     } else if (firstUrl.contains('kiosk-items')) {
-      // doesn't end with get-items
-      settings = defaultConfig.copyWith(
-          staticNameTransformer: {
-            'response.childGroups': 'ChildGroup',
-            'response.itemImages': 'ItemImage',
-            'response.priceLevels[]': 'PriceLevel',
-            'response.modifiers': 'Modifiers',
-            'response.modifiers.modifiers': 'Modifier'
-          }, forceObjectCounting: [
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'response.childGroups': 'ChildGroup',
+        'response.itemImages': 'ItemImage',
+        'response.priceLevels[]': 'PriceLevel',
+        'response.modifiers': 'Modifiers',
+        'response.modifiers.modifiers': 'Modifier'
+      }, forceObjectCounting: [
         'response.priceLevels',
         'response.childGroups.childItems.priceLevels'
+      ]);
+    } else if (firstUrl.contains('orders')) {
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'response.addedItem.priceLevels[]': 'PriceLevel',
+        'request.item.priceLevels[]': 'PriceLevel'
+      }, forceObjectCounting: [
+        'response.addedItem.priceLevels',
+        'request.item.priceLevels'
+      ]);
+    } else if (firstUrl.endsWith('accountInquiry')) {
+      settings = defaultConfig.copyWith(
+        staticNameTransformer: {
+          'request': 'Request',
+          'request.request': 'Inquiry',
+          'response': 'Response',
+          'response.response': 'InquiryResponse',
+          'request#request': 'inquiries'
+        },
+      );
+    } else if (firstUrl.endsWith('getRevenueCategory')) {
+      settings = defaultConfig.copyWith(
+        staticNameTransformer: {
+          'response': 'Response',
+          'response.response': 'Category',
+          'response#response': 'categories'
+        },
+      );
+    } else if (firstUrl.endsWith('getAtriumTendersFromPaymentTypeList')) {
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'response#response': 'tenders',
+        'response[]': 'Tender'
+      }, forceObjectCounting: [
+        'response'
+      ]);
+    } else if (firstUrl.endsWith('getPaymentTenderInfo')) {
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'response#response': 'tenderInfos',
+        'response[]': 'TenderInfo'
+      }, forceObjectCounting: [
+        'response'
+      ]);
+    } else if (firstUrl.endsWith('authAtriumPayment')) {
+      settings = defaultConfig
+          .copyWith(forceObjectCounting: ['request.paymentTenderInfo']);
+    } else if (firstUrl.endsWith('capacityCheck')) {
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'request.conceptTimeFrames[]': 'ConceptTimeFrame'
+      }, forceObjectCounting: [
+        'request.conceptTimeFrames'
+      ]);
+    } else if (firstUrl.endsWith('createMultiPaymentClosedOrder')) {
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'request.receiptInfo.items.priceLevels[]': 'PriceLevel'
+      }, forceObjectCounting: [
+        'request.receiptInfo.items.priceLevels'
       ]);
     }
 
@@ -141,17 +177,6 @@ void main(List<String> arguments) {
     var outFile = [generateDirectory, '$name.g.dart'].file;
     outFile.writeAsString(generate(bruh, name, urls, settings));
   }
-
-  //
-  // generate(bruh, 'getItems',
-  //     'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items');
-
-  // var entry = bruh['https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items'].first;
-  // var responseJson = entry.response.content.json;
-  // print('responseJson = $responseJson');
-  //
-  // var response = get_items.Response.fromJson(responseJson);
-  // print('Item: ${response.name}');
 }
 
 Map<String, List<Entry>> groupEntries(Map<String, List<Entry>> allData,
@@ -168,7 +193,6 @@ String generate(Map<String, List<Entry>> allData, String name,
   var method = getMethod(allData, urls.first);
   var gen = ClassGenerator.fromSettings(
       settings.copyWith(url: urls.first, method: method));
-  // print(prettyEncode(aggregated));
   return gen.generated(aggregated);
 }
 
@@ -212,20 +236,3 @@ Map<String, dynamic> aggregateList(
     'response': [for (var entry in entries) entry.response.content.json]
   };
 }
-
-void output(List<Entry> entries, String name) {
-  var out = 'E:\\ondemand_wrapper_gen\\rout\\$name';
-  Directory(out).createSync(recursive: true);
-  for (var i = 0; i < entries.length; i++) {
-    var entry = entries[i];
-    var outFile = File('$out\\$i.json');
-    var request = entry.request.postData.json;
-    var response = entry.response.content.json;
-    outFile.writeAsStringSync(prettyEncode({
-      'request': request,
-      'response': response,
-    }));
-  }
-}
-
-void cleanRequest() {}

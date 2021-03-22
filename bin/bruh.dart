@@ -6,6 +6,7 @@ import 'package:ondemand_wrapper_gen/gen/test.g.dart' as test;
 void main(List<String> args) {
   var input = '''
 {
+  "base": [{
     "something": "here",
     "integerr": 12,
     "doub": 1.234,
@@ -44,6 +45,7 @@ void main(List<String> args) {
         "name": "bar"
       }
     }
+  }]
 }
     ''';
 
@@ -63,9 +65,9 @@ void main(List<String> args) {
   // Map.fromIterables(list.map((e) => e.key), list.map((e) => e.toJson()));
 
   var gen = ClassGenerator.fromSettings(GeneratorSettings.defaultSettings().copyWith(
-      childrenRequireAggregation: false,
-      forceBaseClasses: false,
-    forceObjectCounting: ['shit']
+      childrenRequireAggregation: true,
+      forceBaseClasses: true,
+    forceObjectCounting: ['base.shit']
   ));
   print(gen.generated(json));
   // var gen = ClassGenerator(className: 'base', json: ondemandInput);
@@ -79,11 +81,11 @@ void main(List<String> args) {
 
   // print('ttt = $tttt');
 
-  var base = test.BaseClass.fromJson(json);
-  var shit = base.shit;
-  for (var t in shit.shit) {
-    print('${t.key}: name: ${t.name} bruh: ${t.bruh}');
-  }
-
-  print('\nJSON:${jsonEncode(shit.toJson())}');
+  // var base = test.BaseClass.fromJson(json);
+  // var shit = base.shit;
+  // for (var t in shit.shit) {
+  //   print('${t.key}: name: ${t.name} bruh: ${t.bruh}');
+  // }
+  //
+  // print('\nJSON:${jsonEncode(shit.toJson())}');
 }

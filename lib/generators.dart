@@ -6,6 +6,7 @@ void fieldGenerator(
     StringBuffer buffer, ClassContext context, List<ElementInfo> fields, bool finalizeFields) {
   for (var info in fields) {
     var type = info.type;
+    buffer.writeln('  // ${info.jsonPath}');
     if (finalizeFields) {
       buffer.write('final ');
     }
@@ -61,7 +62,7 @@ void fromJson(
     });
     buffer.writeln(';');
   } else if (jsonType == JsonType.Array) {
-    print('fields: $fields');
+    // print('fields: $fields');
     if (fields.length != 1) {
       throw 'If jsonType is Array, field length can\'t be more than 1';
     }

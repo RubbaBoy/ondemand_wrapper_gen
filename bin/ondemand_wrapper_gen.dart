@@ -34,18 +34,21 @@ void main(List<String> arguments) {
 
   // groupEntries(bruh, (url) => )
 
-  var allowedUrls = [
+  var allowedUrls = <dynamic>[
     // 'https://ondemand.rit.edu/api/config',
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
     // 'https://ondemand.rit.edu/api/sites/1312',
     // 'https://ondemand.rit.edu/static/assets/manifest.json'
     // 'https://ondemand.rit.edu/api/userProfile/decryptSamlCookie',
-    'https://ondemand.rit.edu/api/sites/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getKitchenLeadTimeForStores',
-    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162',
-    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162/menus/3403',
-    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b87df',
-    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b8822',
-    // 'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders',
+    // 'https://ondemand.rit.edu/api/sites/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getKitchenLeadTimeForStores',
+//     'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162',
+//     'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/concepts/2162/menus/3403',
+//     [
+//       'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b87df',
+//       'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/5f121d554f05a8000c1b8822'
+//     ],
+
+    'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders',
     // 'https://ondemand.rit.edu/api/order/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/orders/5e446350-e67d-4ec3-a348-2393ccc63691',
     // 'https://ondemand.rit.edu/api/atrium/accountInquiry',
     // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/getRevenueCategory',
@@ -65,9 +68,12 @@ void main(List<String> arguments) {
   //
   // if (true) return;
 
-  for (var url in bruh.keys) {
-    if (!allowedUrls.contains(url)) {
-      continue;
+  for (var got in allowedUrls) {
+    var urls = <String>[];
+    if (got is String) {
+      urls = [got as String];
+    } else {
+      urls = got;
     }
 
     var defaultConfig = GeneratorSettings.defaultSettings().copyWith(
@@ -77,46 +83,63 @@ void main(List<String> arguments) {
 
     var settings = defaultConfig;
 
-    if (url.endsWith('get-items')) {
+    var firstUrl = urls.first;
+    if (firstUrl.endsWith('get-items')) {
+      settings = defaultConfig.copyWith(
+          staticNameTransformer: {
+            // 'response': 'FoodItem',
+            'response.response': 'FoodItem',
+            'response.response.childGroups': 'ChildGroup',
+            'response.response.itemImages': 'ItemImage',
+            'response.response.priceLevels': 'PriceLevel'
+          },
+          staticArrayTransformer: {
+            'response': 'Response'
+          },
+          staticArrayFieldTransformer: {
+            'response#response': 'items',
+          },
+          commentGenerator: defaultCommentGenerator(['Request', 'ItemList']),
+          forceObjectCounting: ['response.response.priceLevels']);
+    } else if (firstUrl.endsWith('1312')) {
       settings = defaultConfig.copyWith(staticNameTransformer: {
-        'Response': 'FoodItem',
-        'ChildGroups': 'ChildGroup',
-        'ItemImages': 'ItemImage',
-        'PriceLevelsNum': 'PriceLevel'
-      }, staticArrayTransformer: {
-        'Response': 'ItemList'
+        'response.response.pickUpConfig.conceptEntries': 'ConceptEntry',
+        'response.response.atriumConfig.tenders': 'Tender'
+      }, forceObjectCounting: [
+        'response.response.pickUpConfig.conceptEntries',
+        'response.response.atriumConfig.tenders'
+      ]);
+    } else if (firstUrl.endsWith('getKitchenLeadTimeForStores')) {
+      settings = defaultConfig.copyWith(staticNameTransformer: {
+        'response[]': 'Kitchen',
+        'request.request': 'KitchenRequest',
+        'request': 'Request',
+        'response#response': 'kitchens'
+        // 'response'
       }, staticArrayFieldTransformer: {
-        'Response': 'items',
-      }, commentGenerator: defaultCommentGenerator(['Request', 'ItemList']),
-      forceObjectCounting: [
-        '[].response.priceLevels'
+        'response': 'kitchens',
+        'request#request': 'kitchenRequests'
+      }, forceObjectCounting: [
+        'response'
       ]);
-    } else if (url.endsWith('1312')) {
+    } else if (firstUrl.contains('kiosk-items')) {
+      // doesn't end with get-items
       settings = defaultConfig.copyWith(
-        staticNameTransformer:  {
-          'ConceptEntriesNum': 'ConceptEntry',
-          'TendersNum': 'Tender'
-        },
-          forceObjectCounting: [
-        '[].response.pickUpConfig.conceptEntries',
-        '[].response.atriumConfig.tenders'
+          staticNameTransformer: {
+            'response.childGroups': 'ChildGroup',
+            'response.itemImages': 'ItemImage',
+            'response.priceLevels[]': 'PriceLevel',
+            'response.modifiers': 'Modifiers',
+            'response.modifiers.modifiers': 'Modifier'
+          }, forceObjectCounting: [
+        'response.priceLevels',
+        'response.childGroups.childItems.priceLevels'
       ]);
-    } else if (url.endsWith('getKitchenLeadTimeForStores')) {
-      settings = defaultConfig.copyWith(
-        staticNameTransformer: {
-          'ResponseNum': 'Kitchen'
-        },
-        staticArrayFieldTransformer: {
-        },
-        forceObjectCounting: [
-          'response'
-        ]
-      );
     }
 
-    var name = snake(url.substring(url.lastIndexOf('/')));
+    var name = snake(firstUrl.substring(firstUrl.lastIndexOf('/')));
     var outFile = [generateDirectory, '$name.g.dart'].file;
-    outFile.writeAsString(generate(bruh, name, url, settings));
+    outFile.writeAsString(generate(bruh, name, urls, settings));
   }
 
   //
@@ -139,12 +162,12 @@ Map<String, List<Entry>> groupEntries(Map<String, List<Entry>> allData,
   return map;
 }
 
-String generate(Map<String, List<Entry>> allData, String name, String url,
-    GeneratorSettings settings) {
-  var aggregated = aggregateList(allData, url);
-  var method = getMethod(allData, url);
-  var gen =
-      ClassGenerator.fromSettings(settings.copyWith(url: url, method: method));
+String generate(Map<String, List<Entry>> allData, String name,
+    List<String> urls, GeneratorSettings settings) {
+  var aggregated = aggregateList(allData, urls);
+  var method = getMethod(allData, urls.first);
+  var gen = ClassGenerator.fromSettings(
+      settings.copyWith(url: urls.first, method: method));
   // print(prettyEncode(aggregated));
   return gen.generated(aggregated);
 }
@@ -153,20 +176,22 @@ String getMethod(Map<String, List<Entry>> allData, String url) =>
     allData[url].first.request.method;
 
 BlockCommentGenerator defaultCommentGenerator(
-        [List<String> detailedCommentClasses = const ['Request', 'Response']]) =>
+        [List<String> detailedCommentClasses = const [
+          'Request',
+          'Response'
+        ]]) =>
     (context) {
+      var details = '';
 
-  var details = '';
-
-  if (detailedCommentClasses.contains(context.name)) {
-    details = '''
+      if (detailedCommentClasses.contains(context.name)) {
+        details = '''
   Url: ${context.url}
   Method: ${context.method}
   
   ''';
-  }
+      }
 
-  return '''$details
+      return '''$details
   Json path:
   ```
   ${context.jsonPath}
@@ -175,8 +200,12 @@ BlockCommentGenerator defaultCommentGenerator(
     };
 
 Map<String, dynamic> aggregateList(
-    Map<String, List<Entry>> allData, String url) {
-  var entries = allData[url];
+    Map<String, List<Entry>> allData, List<String> urls) {
+  var entries = allData
+      .where((key, value) => urls.contains(key))
+      .values
+      .reduce((value, element) => [...value, ...element])
+      .toList();
 
   return {
     'request': [for (var entry in entries) entry.request.postData.json],

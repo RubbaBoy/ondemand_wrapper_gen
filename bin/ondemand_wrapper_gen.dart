@@ -33,7 +33,7 @@ void main(List<String> arguments) {
 
   var allowedUrls = <dynamic>[
     // 'https://ondemand.rit.edu/api/config',
-    // 'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
+    'https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items',
     // 'https://ondemand.rit.edu/api/sites/1312',
     // 'https://ondemand.rit.edu/static/assets/manifest.json'
     // 'https://ondemand.rit.edu/api/userProfile/decryptSamlCookie',
@@ -55,8 +55,13 @@ void main(List<String> arguments) {
     // 'https://ondemand.rit.edu/api/order/capacityCheck',
     // 'https://ondemand.rit.edu/api/order/createMultiPaymentClosedOrder',
     // 'https://ondemand.rit.edu/api/communication/getSMSReceipt',
-    'https://ondemand.rit.edu/api/communication/sendSMSReceipt',
+    // 'https://ondemand.rit.edu/api/communication/sendSMSReceipt',
   ];
+
+  var entries = bruh['https://ondemand.rit.edu/api/sites/1312/dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd/kiosk-items/get-items'];
+  for (var value2 in entries) {
+
+  }
 
   for (var got in allowedUrls) {
     var urls = <String>[];
@@ -69,114 +74,134 @@ void main(List<String> arguments) {
     var defaultConfig = GeneratorSettings.defaultSettings().copyWith(
         childrenRequireAggregation: true,
         forceBaseClasses: true,
+        combineNameTransformers: true,
         commentGenerator: defaultCommentGenerator());
 
-    var settings = defaultConfig;
-
     var firstUrl = urls.first;
-    if (firstUrl.endsWith('get-items')) {
-      settings = defaultConfig.copyWith(
-          staticNameTransformer: {
-            'response.response': 'FoodItem',
-            'response.response.childGroups': 'ChildGroup',
-            'response.response.itemImages': 'ItemImage',
-            'response.response.priceLevels': 'PriceLevel',
-            'response#response': 'items',
-          },
-          staticArrayTransformer: {'response': 'Response'},
-          commentGenerator: defaultCommentGenerator(['Request', 'ItemList']),
-          forceObjectCounting: ['response.response.priceLevels']);
-    } else if (firstUrl.endsWith('1312')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'response.response.pickUpConfig.conceptEntries': 'ConceptEntry',
-        'response.response.atriumConfig.tenders': 'Tender'
-      }, forceObjectCounting: [
-        'response.response.pickUpConfig.conceptEntries',
-        'response.response.atriumConfig.tenders'
-      ]);
-    } else if (firstUrl.endsWith('getKitchenLeadTimeForStores')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'response[]': 'Kitchen',
-        'request.request': 'KitchenRequest',
-        'request': 'Request',
-        'response#response': 'kitchens',
-        'response': 'kitchens',
-        'request#request': 'kitchenRequests'
-      }, forceObjectCounting: [
-        'response'
-      ]);
-    } else if (firstUrl.contains('kiosk-items')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'response.childGroups': 'ChildGroup',
-        'response.itemImages': 'ItemImage',
-        'response.priceLevels[]': 'PriceLevel',
-        'response.modifiers': 'Modifiers',
-        'response.modifiers.modifiers': 'Modifier'
-      }, forceObjectCounting: [
-        'response.priceLevels',
-        'response.childGroups.childItems.priceLevels'
-      ]);
-    } else if (firstUrl.contains('orders')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'response.addedItem.priceLevels[]': 'PriceLevel',
-        'request.item.priceLevels[]': 'PriceLevel'
-      }, forceObjectCounting: [
-        'response.addedItem.priceLevels',
-        'request.item.priceLevels'
-      ]);
-    } else if (firstUrl.endsWith('accountInquiry')) {
-      settings = defaultConfig.copyWith(
-        staticNameTransformer: {
-          'request': 'Request',
-          'request.request': 'Inquiry',
-          'response': 'Response',
-          'response.response': 'InquiryResponse',
-          'request#request': 'inquiries'
-        },
-      );
-    } else if (firstUrl.endsWith('getRevenueCategory')) {
-      settings = defaultConfig.copyWith(
-        staticNameTransformer: {
-          'response': 'Response',
-          'response.response': 'Category',
-          'response#response': 'categories'
-        },
-      );
-    } else if (firstUrl.endsWith('getAtriumTendersFromPaymentTypeList')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'response#response': 'tenders',
-        'response[]': 'Tender'
-      }, forceObjectCounting: [
-        'response'
-      ]);
-    } else if (firstUrl.endsWith('getPaymentTenderInfo')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'response#response': 'tenderInfos',
-        'response[]': 'TenderInfo'
-      }, forceObjectCounting: [
-        'response'
-      ]);
-    } else if (firstUrl.endsWith('authAtriumPayment')) {
-      settings = defaultConfig
-          .copyWith(forceObjectCounting: ['request.paymentTenderInfo']);
-    } else if (firstUrl.endsWith('capacityCheck')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'request.conceptTimeFrames[]': 'ConceptTimeFrame'
-      }, forceObjectCounting: [
-        'request.conceptTimeFrames'
-      ]);
-    } else if (firstUrl.endsWith('createMultiPaymentClosedOrder')) {
-      settings = defaultConfig.copyWith(staticNameTransformer: {
-        'request.receiptInfo.items.priceLevels[]': 'PriceLevel'
-      }, forceObjectCounting: [
-        'request.receiptInfo.items.priceLevels'
-      ]);
-    }
+    var settings = getSettings(firstUrl, defaultConfig);
 
     var name = snake(firstUrl.substring(firstUrl.lastIndexOf('/')));
     var outFile = [generateDirectory, '$name.g.dart'].file;
     outFile.writeAsString(generate(bruh, name, urls, settings));
   }
+}
+
+GeneratorSettings getSettings(String url, GeneratorSettings defaultConfig) {
+  if (url.endsWith('get-items')) {
+    return defaultConfig.copyWith(
+        staticNameTransformer: {
+          'response.response': 'FoodItem',
+          'response.response.childGroups': 'ChildGroup',
+          'response.response.itemImages': 'ItemImage',
+          'response.response.priceLevels[]': 'PriceLevel',
+          'response#response': 'items',
+          'response': 'Response'
+        },
+        commentGenerator: defaultCommentGenerator(['Request', 'ItemList']),
+        forceObjectCounting: ['response.response.priceLevels']);
+  } else if (url.endsWith('1312')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response': 'Response',
+      'response#response': 'kitchens',
+      'response.response': 'Kitchen',
+      'response.response.pickUpConfig.conceptEntries': 'ConceptEntry',
+      'response.response.atriumConfig.tenders': 'Tender',
+    }, forceObjectCounting: [
+      'response.response.pickUpConfig.conceptEntries',
+      'response.response.atriumConfig.tenders'
+    ]);
+  } else if (url.endsWith('2162')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response': 'Response',
+      'response#response': 'Place',
+      'response.response': 'places'
+    });
+  } else if (url.endsWith('3403')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response': 'Response',
+      'response#response': 'Place',
+      'response.response': 'places'
+    });
+  } else if (url.endsWith('getKitchenLeadTimeForStores')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response[]': 'Kitchen',
+      'request.request': 'KitchenRequest',
+      'request': 'Request',
+      'response#response': 'kitchens',
+      'response': 'kitchens',
+      'request#request': 'kitchenRequests'
+    }, forceObjectCounting: [
+      'response'
+    ]);
+  } else if (url.contains('kiosk-items')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response.childGroups': 'ChildGroup',
+      'response.itemImages': 'ItemImage',
+      'response.priceLevels[]': 'PriceLevel',
+      'response.modifiers': 'Modifiers',
+      'response.modifiers.modifiers': 'Modifier'
+    }, forceObjectCounting: [
+      'response.priceLevels',
+      'response.childGroups.childItems.priceLevels'
+    ]);
+  } else if (url.contains('orders')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response.addedItem.priceLevels[]': 'PriceLevel',
+      'request.item.priceLevels[]': 'PriceLevel'
+    }, forceObjectCounting: [
+      'response.addedItem.priceLevels',
+      'request.item.priceLevels'
+    ]);
+  } else if (url.endsWith('accountInquiry')) {
+    return defaultConfig.copyWith(
+      staticNameTransformer: {
+        'request': 'Request',
+        'request.request': 'Inquiry',
+        'response': 'Response',
+        'response.response': 'InquiryResponse',
+        'request#request': 'inquiries'
+      },
+    );
+  } else if (url.endsWith('getRevenueCategory')) {
+    return defaultConfig.copyWith(
+      staticNameTransformer: {
+        'response': 'Response',
+        'response.response': 'Category',
+        'response#response': 'categories'
+      },
+    );
+  } else if (url.endsWith('getAtriumTendersFromPaymentTypeList')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response#response': 'tenders',
+      'response[]': 'Tender'
+    }, forceObjectCounting: [
+      'response'
+    ]);
+  } else if (url.endsWith('getPaymentTenderInfo')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'response#response': 'tenderInfos',
+      'response[]': 'TenderInfo'
+    }, forceObjectCounting: [
+      'response'
+    ]);
+  } else if (url.endsWith('authAtriumPayment')) {
+    return defaultConfig
+        .copyWith(forceObjectCounting: ['request.paymentTenderInfo']);
+  } else if (url.endsWith('capacityCheck')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'request.conceptTimeFrames[]': 'ConceptTimeFrame'
+    }, forceObjectCounting: [
+      'request.conceptTimeFrames'
+    ]);
+  } else if (url.endsWith('createMultiPaymentClosedOrder')) {
+    return defaultConfig.copyWith(staticNameTransformer: {
+      'request.receiptInfo.items.priceLevels[]': 'PriceLevel'
+    }, forceObjectCounting: [
+      'request.receiptInfo.items.priceLevels'
+    ]);
+  }
+
+  return defaultConfig;
 }
 
 Map<String, List<Entry>> groupEntries(Map<String, List<Entry>> allData,

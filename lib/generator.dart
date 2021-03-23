@@ -54,6 +54,10 @@ class ClassGenerator {
   /// If [true], all generated fields will be final.
   final bool finalizeFields;
 
+  /// If [staticArrayTransformer] should be replaced with
+  /// [staticNameTransformer].
+  final bool combineNameTransformers;
+
   /// The JSON path of the object containing multiple objects, all with names
   /// as a number. This will force ALL children members into a single object.
   /// For example:
@@ -76,10 +80,11 @@ class ClassGenerator {
   /// The amount of clashes for a class name
   final clashes = <String, int>{};
 
-  /// The [statusNameTransformer] takes precedence over the supplied or default
+  /// The [staticNameTransformer] takes precedence over the supplied or default
   /// [nameTransformer], replacing the key names with the values.
   /// The [staticArrayTransformer] takes precedence over the supplied or
   /// default [arrayTransformer], replacing the key names with the values.
+  /// If [staticArrayTransformer] is empty, it is set to [staticNameTransformer].
   /// [childrenRequireAggregation] must be set to true if the input is in the
   /// form of members with arrays of multiple responses. This simply invokes
   /// [aggregateMultiple] on each field of the input JSON before conversion.
@@ -98,6 +103,7 @@ class ClassGenerator {
     this.extraGenerators = const [],
     this.shareClasses = true,
     this.finalizeFields = true,
+    this.combineNameTransformers = false,
     this.commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
@@ -105,13 +111,19 @@ class ClassGenerator {
     Map<String, String> staticArrayTransformer = const {},
     this.forceObjectCounting = const [],
   }) : formatOutput = formatOutput ?? _formatter.format {
-    var backupNameTransformer = nameTransformer ?? identitySecond;
-    this.nameTransformer = (path, name) => staticNameTransformer[path] ?? backupNameTransformer(path, name);
 
-    var backupArrayTransformer =
-        arrayTransformer ?? (_, name) => name + '_array';
-    this.arrayTransformer = (path, name) =>
-        staticArrayTransformer[path] ?? backupArrayTransformer(path, name);
+    var backupNameTransformer = nameTransformer ?? identitySecond;
+    this.nameTransformer = (path, name) =>
+        staticNameTransformer[path] ?? backupNameTransformer(path, name);
+
+    if (combineNameTransformers) {
+      arrayTransformer = nameTransformer;
+    } else {
+      var backupArrayTransformer =
+          arrayTransformer ?? (_, name) => name + '_array';
+      this.arrayTransformer = (path, name) =>
+      staticArrayTransformer[path] ?? backupArrayTransformer(path, name);
+    }
   }
 
   factory ClassGenerator.fromSettings(GeneratorSettings settings) =>
@@ -126,6 +138,7 @@ class ClassGenerator {
           extraGenerators: settings.extraGenerators,
           shareClasses: settings.shareClasses,
           finalizeFields: settings.finalizeFields,
+          combineNameTransformers: settings.combineNameTransformers,
           commentGenerator: settings.commentGenerator,
           nameTransformer: settings.nameTransformer,
           arrayTransformer: settings.arrayTransformer,
@@ -244,14 +257,22 @@ class ClassGenerator {
       classVisitor(creatingName, deep, creatingPath,
           countingObject: true,
           extraFields: [
-            ElementInfo(ElementType.String, generator: this, parentPath: creatingPath,
-                jsonName: keyName, countingKey: true),
+            ElementInfo(ElementType.String,
+                generator: this,
+                parentPath: creatingPath,
+                jsonName: keyName,
+                countingKey: true),
           ]);
 
-      fields.add(ElementInfo(ElementType.KeyedObject, generator: this, parentPath: jsonPath,
+      fields.add(ElementInfo(ElementType.KeyedObject,
+          generator: this,
+          parentPath: jsonPath,
           jsonName: camel(name),
-          arrayInfo: ElementInfo(ElementType.Object, generator: this, parentPath: jsonPath,
-              jsonName: creatingName, objectName: creatingName)));
+          arrayInfo: ElementInfo(ElementType.Object,
+              generator: this,
+              parentPath: jsonPath,
+              jsonName: creatingName,
+              objectName: creatingName)));
     } else {
       for (var entry in json.entries) {
         var jsonName = entry.key;
@@ -362,6 +383,7 @@ class GeneratorSettings {
   final List<BlockGenerator> extraGenerators;
   final bool shareClasses;
   final bool finalizeFields;
+  final bool combineNameTransformers;
   final BlockCommentGenerator commentGenerator;
   final NameTransformer nameTransformer;
   final NameTransformer arrayTransformer;
@@ -378,6 +400,7 @@ class GeneratorSettings {
         extraGenerators: const [],
         shareClasses: true,
         finalizeFields: true,
+        combineNameTransformers: false,
         staticNameTransformer: const {},
         staticArrayTransformer: const {},
         forceObjectCounting: const [],
@@ -397,6 +420,7 @@ class GeneratorSettings {
       this.extraGenerators,
       this.shareClasses,
       this.finalizeFields,
+      this.combineNameTransformers,
       this.commentGenerator,
       this.nameTransformer,
       this.arrayTransformer,
@@ -420,6 +444,7 @@ class GeneratorSettings {
         extraGenerators: merging.extraGenerators ?? fallback.extraGenerators,
         shareClasses: merging.shareClasses ?? fallback.shareClasses,
         finalizeFields: merging.finalizeFields ?? fallback.finalizeFields,
+        combineNameTransformers: merging.combineNameTransformers ?? fallback.combineNameTransformers,
         commentGenerator: merging.commentGenerator ?? fallback.commentGenerator,
         nameTransformer: merging.nameTransformer ?? fallback.nameTransformer,
         arrayTransformer: merging.arrayTransformer ?? fallback.arrayTransformer,
@@ -447,6 +472,7 @@ class GeneratorSettings {
     List<BlockGenerator> extraGenerators,
     bool shareClasses,
     bool finalizeFields,
+    bool combineNameTransformers,
     BlockCommentGenerator commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
@@ -466,6 +492,7 @@ class GeneratorSettings {
             extraGenerators: extraGenerators,
             shareClasses: shareClasses,
             finalizeFields: finalizeFields,
+            combineNameTransformers: combineNameTransformers,
             commentGenerator: commentGenerator,
             nameTransformer: nameTransformer,
             arrayTransformer: arrayTransformer,
@@ -529,8 +556,8 @@ class ElementInfo {
       ElementInfo._(type,
           jsonPath: '$parentPath#$jsonName',
           jsonName: jsonName,
-          dartName: camel(
-              dartName ?? generator.validateClassName('$parentPath#$jsonName', jsonName)),
+          dartName: camel(dartName ??
+              generator.validateClassName('$parentPath#$jsonName', jsonName)),
           arrayInfo: arrayInfo,
           objectName: objectName,
           countingKey: countingKey);
@@ -600,8 +627,8 @@ class ElementInfo {
 
         // If the array's type is an Object, create the inner object
         if (arrayType.type == ElementType.Object) {
-          classGenerator.classVisitor(
-              creatingName, aggregate(listElement.first), '$creatingPath.$creatingName');
+          classGenerator.classVisitor(creatingName,
+              aggregate(listElement.first), '$creatingPath.$creatingName');
 
           classGenerator.classVisitor(containingTypeName, {}, creatingPath,
               extraFields: [
@@ -642,7 +669,8 @@ class ElementInfo {
           dartName: dartName);
     }
 
-    return ElementInfo(type, generator: classGenerator, parentPath: jsonPath, jsonName: jsonName);
+    return ElementInfo(type,
+        generator: classGenerator, parentPath: jsonPath, jsonName: jsonName);
   }
 
   /// Gets the [ElementType] of the children of a given JSON array (In the form
@@ -654,7 +682,8 @@ class ElementInfo {
     var types = list.map((e) => e.runtimeType).toSet();
 
     if (types.isEmpty) {
-      return ElementInfo(ElementType.Unknown, generator: classGenerator, parentPath: jsonPath);
+      return ElementInfo(ElementType.Unknown,
+          generator: classGenerator, parentPath: jsonPath);
     }
 
     if (types.length == 1) {
@@ -662,7 +691,8 @@ class ElementInfo {
           jsonName: jsonName, listElement: list);
     }
 
-    return ElementInfo(ElementType.Mixed, generator: classGenerator, parentPath: jsonPath);
+    return ElementInfo(ElementType.Mixed,
+        generator: classGenerator, parentPath: jsonPath);
   }
 
   @override
@@ -824,7 +854,7 @@ class ElementType {
       this.generateFromJson})
       : _typeTest = valueTest ?? ((value) => value.runtimeType == type) {
     generate ??= GenerateSimpleCode(
-            (dartName, info) => '${generateTypeString(info)} $dartName;');
+        (dartName, info) => '${generateTypeString(info)} $dartName;');
     generateTypeString ??=
         GenerateSimpleCode((dartName, _) => typeString ?? type?.toString());
     generateToJson ??=

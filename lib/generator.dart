@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:core';
 import 'dart:core' as core;
 
@@ -117,7 +118,7 @@ class ClassGenerator {
         staticNameTransformer[path] ?? backupNameTransformer(path, name);
 
     if (combineNameTransformers) {
-      arrayTransformer = nameTransformer;
+      this.arrayTransformer = this.nameTransformer;
     } else {
       var backupArrayTransformer =
           arrayTransformer ?? (_, name) => name + '_array';

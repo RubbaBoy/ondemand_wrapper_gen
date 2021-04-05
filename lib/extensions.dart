@@ -25,6 +25,9 @@ extension ListUtility<E> on Iterable<E> {
     var i = 0;
     forEach((e) => action(i++, e));
   }
+
+  E safeReduce(E Function(E value, E element) combine) =>
+      isEmpty ? null : reduce(combine);
 }
 
 extension PathUtils on List<dynamic> {

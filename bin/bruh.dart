@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:ondemand_wrapper_gen/generator.dart';
-import 'package:ondemand_wrapper_gen/gen/test.g.dart' as test;
 
 void main(List<String> args) {
   var input = '''

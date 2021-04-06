@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generate_utils.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
-
-import 'file:///E:/ondemand_wrapper_gen/lib/generator/class/generator.dart';
 
 class Creator {
   /// Creates classes from entries. Returns the list of files created.
@@ -38,6 +37,8 @@ class Creator {
           forceCounting: [
             'response.response.priceLevels'
           ]),
+
+      Request('login', r'https://ondemand.rit.edu/api/login/anonymous/$', placeholders: ['siteNumber']),
 
       // Gets the kitchens in the site
       Request('get_kitchens', r'https://ondemand.rit.edu/api/sites/$',
@@ -207,25 +208,24 @@ class Creator {
     var createdFiles = <CreatedFile>[];
     var usedUrls = <String>[];
     for (var request in requests) {
-      print('URL = ${request.url}');
       var generator = request.getSettings(settings);
       var placeholderData = getPlaceholdered(request.url, entries.keys.toList(), usedUrls);
-      print('pla = $placeholderData for ${request.url}');
       var urls = placeholderData.map((e) => e.url).toList();
 
       var outFile = [generateDirectory, '${request.name}.g.dart'].file;
 
+      var generatedFile = generate(entries, request.name, urls, generator);
       if (write) {
-        outFile.writeAsString(generate(entries, request.name, urls, generator));
+        outFile.writeAsString(generatedFile.generated);
       }
 
-      createdFiles.add(CreatedFile(request, outFile));
+      createdFiles.add(CreatedFile(request, outFile, generatedFile.method));
     }
 
     return createdFiles;
   }
 
-  String generate(Map<String, List<Entry>> allData, String name,
+  GeneratedFile generate(Map<String, List<Entry>> allData, String name,
       List<String> urls, GeneratorSettings settings) {
     var aggregated = aggregateList(allData, urls);
 
@@ -236,7 +236,7 @@ class Creator {
     var method = getMethod(allData, urls.first);
     var gen = ClassGenerator.fromSettings(
         settings.copyWith(url: urls.first, method: method));
-    return gen.generated(aggregated);
+    return GeneratedFile(gen.generated(aggregated), method);
   }
 
   String getMethod(Map<String, List<Entry>> allData, String url) =>
@@ -302,8 +302,16 @@ class Creator {
 class CreatedFile {
   final Request request;
   final File created;
+  final String method;
 
-  CreatedFile(this.request, this.created);
+  CreatedFile(this.request, this.created, this.method);
+}
+
+class GeneratedFile {
+  final String generated;
+  final String method;
+
+  GeneratedFile(this.generated, this.method);
 }
 
 class Request {

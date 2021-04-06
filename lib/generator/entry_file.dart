@@ -97,7 +97,7 @@ class GenerateEntryFile {
         '''
     ) async {
     
-    var res = await http.post(Uri.parse('${replaceParams(request.url, request.placeholders)}'));
+    var res = await http.${createdFile.method.toLowerCase()}(Uri.parse('${replaceParams(request.url, request.placeholders)}'));
     if (res.statusCode != 200) {
       return Future.error('Status \${res.statusCode}: \${res.body}');
     }

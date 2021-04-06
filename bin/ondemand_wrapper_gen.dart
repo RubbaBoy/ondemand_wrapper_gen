@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:ondemand_wrapper_gen/creating.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
-import 'file:///E:/ondemand_wrapper_gen/lib/generator/class/generator.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
 import 'package:ondemand_wrapper_gen/generator/entry_file.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
 

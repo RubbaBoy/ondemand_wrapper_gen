@@ -2,9 +2,9 @@ import 'dart:core';
 import 'dart:core' as core;
 
 import 'package:dart_style/dart_style.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generators.dart';
 import 'package:ondemand_wrapper_gen/utility.dart';
 
-import 'file:///E:/ondemand_wrapper_gen/lib/generator/class/generators.dart';
 
 import 'generate_elements.dart';
 import 'generate_utils.dart';

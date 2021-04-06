@@ -1,6 +1,5 @@
 import 'package:ondemand_wrapper_gen/extensions.dart';
-
-import 'file:///E:/ondemand_wrapper_gen/lib/generator/class/generator.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
 
 import 'generate_elements.dart';
 

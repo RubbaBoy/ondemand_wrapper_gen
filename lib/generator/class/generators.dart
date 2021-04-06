@@ -3,8 +3,13 @@ import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
 
 import 'generate_elements.dart';
 
-void fieldGenerator(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, bool finalizeFields) {
+void importGenerator(StringBuffer buffer) {
+  buffer.writeln("import 'base.g.dart';");
+  buffer.writeln();
+}
+
+void fieldGenerator(StringBuffer buffer, ClassContext context,
+    List<ElementInfo> fields, bool finalizeFields) {
   for (var info in fields) {
     var type = info.type;
     buffer.writeln('  // ${info.jsonPath}');
@@ -16,51 +21,78 @@ void fieldGenerator(
   }
 }
 
-void constructorGenerator(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields) {
+void constructorGenerator(StringBuffer buffer, ClassContext context,
+    List<ElementInfo> fields, bool requireHeader) {
   if (fields.isEmpty) {
     return;
   }
 
   buffer.write('${context.name}({');
 
-  fields.forEachI((index, info) {
+  [...fields.map((e) => e.dartName), if (requireHeader) null]
+      .forEachI((index, name) {
     if (index != 0) {
       buffer.write(', ');
     }
-    buffer.write('this.${info.dartName}');
+
+    if (name == null) {
+      buffer.write('List<Header> headers');
+    } else {
+      buffer.write('this.$name');
+    }
   });
 
-  buffer.writeln('});');
+  buffer.write('})');
+
+  if (requireHeader) {
+    buffer.write(' : super(headers)');
+  }
+
+  buffer.write(';');
 }
 
-void fromJson(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
+void fromJson(StringBuffer buffer, ClassContext context,
+    List<ElementInfo> fields, JsonType jsonType, bool requireHeader) {
   if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
-
     buffer.write('${context.name}.fromJson(');
 
     if (jsonType == JsonType.KeyedObject) {
-      var countingKey = fields.firstWhere((field) => field.countingKey, orElse: () => throw 'No counting key found in KeyedObject!');
+      var countingKey = fields.firstWhere((field) => field.countingKey,
+          orElse: () => throw 'No counting key found in KeyedObject!');
       buffer.write('this.${countingKey.dartName}, ');
     }
 
-    buffer.write('Map<String, dynamic> json)');
+    buffer.write('Map<String, dynamic> json');
 
-    if (fields.isEmpty) {
+    if (requireHeader) {
+      buffer.write(', List<Header> headers');
+    }
+
+    buffer.write(')');
+
+    if (fields.isEmpty && !requireHeader) {
       buffer.writeln(';');
       return;
     }
 
     buffer.writeln(' :');
-    fields.where((field) => !field.countingKey).forEachI((index, info) {
+    var nonCounting = fields.where((field) => !field.countingKey).toList();
+    nonCounting.forEachI((index, info) {
       if (index != 0) {
         buffer.write(',\n');
       }
       buffer.write(
-          '${info.dartName} = ${info.type.generateFromJson(info).replaceAll(
-              '\$', "json['${info.jsonName}']")}');
+          '${info.dartName} = ${info.type.generateFromJson(info).replaceAll('\$', "json['${info.jsonName}']")}');
     });
+
+    if (requireHeader) {
+      if (nonCounting.isNotEmpty) {
+        buffer.write(', ');
+      }
+
+      buffer.write('super(headers)');
+    }
+
     buffer.writeln(';');
   } else if (jsonType == JsonType.Array) {
     // print('fields: $fields');
@@ -69,17 +101,27 @@ void fromJson(
     }
 
     var first = fields.first;
-    buffer.writeln('${context.name}.fromJson(dynamic json) :');
+    buffer.write('${context.name}.fromJson(dynamic json');
 
-    buffer.writeln('${first.dartName} = ${first.type.generateFromJson(first).replaceAll(
-        '\$', 'json')}');
+    if (requireHeader) {
+      buffer.write(', List<Header> headers');
+    }
+
+    buffer.writeln(') :');
+
+    buffer.writeln(
+        '${first.dartName} = ${first.type.generateFromJson(first).replaceAll('\$', 'json')}');
+
+    if (requireHeader) {
+      buffer.writeln(', super(headers)');
+    }
 
     buffer.writeln(';');
   }
 }
 
-void toJson(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
+void toJson(StringBuffer buffer, ClassContext context, List<ElementInfo> fields,
+    JsonType jsonType) {
   if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
     buffer.writeln('Map<String, dynamic> toJson() => {');
     fields.where((field) => !field.countingKey).forEachI((index, info) {
@@ -87,22 +129,24 @@ void toJson(
         buffer.write(',\n');
       }
       buffer.write(
-          "'${info.jsonName}': ${info.type.generateToJson(info).replaceAll(
-              '\$', info.dartName)}");
+          "'${info.jsonName}': ${info.type.generateToJson(info).replaceAll('\$', info.dartName)}");
     });
     buffer.writeln('};');
   } else if (jsonType == JsonType.Array) {
     var first = fields.first;
-    buffer.writeln('List<dynamic> toJson() => ${first.type.generateToJson(first).replaceAll(
-        '\$', first.dartName)};');
+    buffer.writeln(
+        'List<dynamic> toJson() => ${first.type.generateToJson(first).replaceAll('\$', first.dartName)};');
   }
 }
 
-void getKey(
-    StringBuffer buffer, ClassContext context, List<ElementInfo> fields, JsonType jsonType) {
+void getKey(StringBuffer buffer, ClassContext context, List<ElementInfo> fields,
+    JsonType jsonType) {
   if (jsonType == JsonType.KeyedObject) {
     buffer.write('String getKey() => ');
-    buffer.write(fields.firstWhere((field) => field.countingKey, orElse: () => throw 'No counting key found in KeyedObject!').dartName);
+    buffer.write(fields
+        .firstWhere((field) => field.countingKey,
+            orElse: () => throw 'No counting key found in KeyedObject!')
+        .dartName);
     buffer.writeln(';');
   }
 }
@@ -110,8 +154,10 @@ void getKey(
 enum JsonType {
   /// For base objects of `Map<String, dynamic>`
   Object,
+
   /// For objects that need to accept keys into them
   KeyedObject,
+
   /// For base objects of `List<Map<String, dynamic>>`
   Array
 }

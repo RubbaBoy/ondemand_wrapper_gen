@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generate_utils.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
-import 'package:ondemand_wrapper_gen/hmmm.dart';
+import 'package:ondemand_wrapper_gen/har_api.dart';
 
 class Creator {
   /// Creates classes from entries. Returns the list of files created.
@@ -225,7 +225,7 @@ class Creator {
     return createdFiles;
   }
 
-  GeneratedFile generate(Map<String, List<Entry>> allData, String name,
+  _GeneratedFile generate(Map<String, List<Entry>> allData, String name,
       List<String> urls, GeneratorSettings settings) {
     var aggregated = aggregateList(allData, urls);
 
@@ -236,13 +236,14 @@ class Creator {
     var method = getMethod(allData, urls.first);
     var gen = ClassGenerator.fromSettings(
         settings.copyWith(url: urls.first, method: method));
-    return GeneratedFile(gen.generated(aggregated), method);
+    print(urls.first);
+    return _GeneratedFile(gen.generated(aggregated.aggregated, aggregated.hasRequestBody, aggregated.hasResponseBody), method);
   }
 
   String getMethod(Map<String, List<Entry>> allData, String url) =>
       allData[url].first.request.method;
 
-  Map<String, dynamic> aggregateList(
+  _AggregatedResponse aggregateList(
       Map<String, List<Entry>> allData, List<String> urls) {
     var entries = allData
         .where((key, value) => urls.contains(key))
@@ -254,10 +255,13 @@ class Creator {
       return null;
     }
 
-    return {
+    var hasRequestBody = entries.first.request.method == 'POST';
+    var hasResponseBody = entries.first.response.content.mimeType.contains('application/json');
+
+    return _AggregatedResponse({
       'request': [for (var entry in entries) entry.request.postData.json],
-      'response': [for (var entry in entries) entry.response.content.json]
-    };
+      'response': [if (hasResponseBody) for (var entry in entries) entry.response.content.json else {}]
+    }, hasRequestBody, hasResponseBody);
   }
 
   BlockCommentGenerator defaultCommentGenerator(
@@ -307,11 +311,19 @@ class CreatedFile {
   CreatedFile(this.request, this.created, this.method);
 }
 
-class GeneratedFile {
+class _GeneratedFile {
   final String generated;
   final String method;
 
-  GeneratedFile(this.generated, this.method);
+  _GeneratedFile(this.generated, this.method);
+}
+
+class _AggregatedResponse {
+  final Map<String, dynamic> aggregated;
+  final bool hasRequestBody;
+  final bool hasResponseBody;
+
+  _AggregatedResponse(this.aggregated, this.hasRequestBody, this.hasResponseBody);
 }
 
 class Request {

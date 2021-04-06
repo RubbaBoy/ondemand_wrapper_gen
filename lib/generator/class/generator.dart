@@ -59,6 +59,10 @@ class ClassGenerator {
   /// [staticNameTransformer].
   final bool combineNameTransformers;
 
+  /// If there is no request or response body for the given request. (And if the
+  /// response both should be ignored)
+  final bool unbodiedRequest;
+
   /// The JSON path of the object containing multiple objects, all with names
   /// as a number. This will force ALL children members into a single object.
   /// For example:
@@ -105,6 +109,7 @@ class ClassGenerator {
     this.shareClasses = true,
     this.finalizeFields = true,
     this.combineNameTransformers = false,
+    this.unbodiedRequest = false,
     this.commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
@@ -140,6 +145,7 @@ class ClassGenerator {
           shareClasses: settings.shareClasses,
           finalizeFields: settings.finalizeFields,
           combineNameTransformers: settings.combineNameTransformers,
+          unbodiedRequest: settings.unbodiedRequest,
           commentGenerator: settings.commentGenerator,
           nameTransformer: settings.nameTransformer,
           arrayTransformer: settings.arrayTransformer,
@@ -147,9 +153,12 @@ class ClassGenerator {
           staticArrayTransformer: settings.staticArrayTransformer,
           forceObjectCounting: settings.forceObjectCounting);
 
-  String generated(Map<String, dynamic> json) {
+  /// The latter 2 params are ignored
+  String generated(Map<String, dynamic> json, bool hasRequestBody, bool hasResponseBody) {
     json = Map.unmodifiable(json);
     var string = StringBuffer();
+
+    importGenerator(string);
 
     if (childrenRequireAggregation) {
       var aggregated = json.map<String, MapEntry<dynamic, bool>>((key, value) {
@@ -176,8 +185,6 @@ class ClassGenerator {
         }
         return MapEntry(key, MapEntry(redone, requireArray));
       });
-
-      // print(prettyEncode(aggregated.map((key, value) => MapEntry(key, value.key))));
 
       for (var jsonName in aggregated.keys) {
         var entry = aggregated[jsonName];
@@ -242,8 +249,19 @@ class ClassGenerator {
           .map((e) => '/// $e')
           .join('\n');
     }
-    var res = StringBuffer(comment ?? '');
-    res.writeln('\nclass ${context.name} {');
+    var res = StringBuffer();
+
+    var requireHeader = false;
+    var extendString = '';
+    if (jsonPath == 'request') {
+      extendString = 'extends BaseRequest ';
+      requireHeader = true;
+    } else if (jsonPath == 'response') {
+      extendString = 'extends BaseResponse ';
+      requireHeader = true;
+    }
+
+    res.writeln('${comment ?? ''}\nclass ${context.name} $extendString{');
 
     var fields = extraFields.toList();
     if (forceObjectCounting.contains(cleanPath(jsonPath))) {
@@ -300,9 +318,9 @@ class ClassGenerator {
     [
       (buffer, context, fields) =>
           fieldGenerator(buffer, context, fields, finalizeFields),
-      constructorGenerator,
+      (buffer, context, fields) => constructorGenerator(buffer, context, fields, requireHeader),
       (buffer, context, fields) => getKey(buffer, context, fields, jsonType),
-      (buffer, context, fields) => fromJson(buffer, context, fields, jsonType),
+      (buffer, context, fields) => fromJson(buffer, context, fields, jsonType, requireHeader),
       (buffer, context, fields) => toJson(buffer, context, fields, jsonType),
       ...extraGenerators,
     ].forEach((generator) {
@@ -385,6 +403,7 @@ class GeneratorSettings {
   final bool shareClasses;
   final bool finalizeFields;
   final bool combineNameTransformers;
+  final bool unbodiedRequest;
   final BlockCommentGenerator commentGenerator;
   final NameTransformer nameTransformer;
   final NameTransformer arrayTransformer;
@@ -402,6 +421,7 @@ class GeneratorSettings {
         shareClasses: true,
         finalizeFields: true,
         combineNameTransformers: false,
+        unbodiedRequest: false,
         staticNameTransformer: const {},
         staticArrayTransformer: const {},
         forceObjectCounting: const [],
@@ -422,6 +442,7 @@ class GeneratorSettings {
       this.shareClasses,
       this.finalizeFields,
       this.combineNameTransformers,
+      this.unbodiedRequest,
       this.commentGenerator,
       this.nameTransformer,
       this.arrayTransformer,
@@ -446,6 +467,7 @@ class GeneratorSettings {
         shareClasses: merging.shareClasses ?? fallback.shareClasses,
         finalizeFields: merging.finalizeFields ?? fallback.finalizeFields,
         combineNameTransformers: merging.combineNameTransformers ?? fallback.combineNameTransformers,
+        unbodiedRequest: merging.unbodiedRequest ?? fallback.unbodiedRequest,
         commentGenerator: merging.commentGenerator ?? fallback.commentGenerator,
         nameTransformer: merging.nameTransformer ?? fallback.nameTransformer,
         arrayTransformer: merging.arrayTransformer ?? fallback.arrayTransformer,
@@ -474,6 +496,7 @@ class GeneratorSettings {
     bool shareClasses,
     bool finalizeFields,
     bool combineNameTransformers,
+    bool unbodiedRequest,
     BlockCommentGenerator commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
@@ -494,6 +517,7 @@ class GeneratorSettings {
             shareClasses: shareClasses,
             finalizeFields: finalizeFields,
             combineNameTransformers: combineNameTransformers,
+            unbodiedRequest: unbodiedRequest,
             commentGenerator: commentGenerator,
             nameTransformer: nameTransformer,
             arrayTransformer: arrayTransformer,

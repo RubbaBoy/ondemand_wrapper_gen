@@ -37,10 +37,11 @@ class GenerateEntryFile {
   void generateImports(List<CreatedFile> createdFiles, StringBuffer buffer) {
     buffer.writeln("import 'dart:convert';");
     buffer.writeln("import 'package:http/http.dart' as http;");
+    buffer.writeln("import 'base.g.dart';");
 
     for (var file in createdFiles) {
       var name = file.request.name;
-      buffer.writeln("import 'package:ondemand_wrapper_gen/gen/$name.g.dart' as $name;");
+      buffer.writeln("import 'package:ondemand_wrapper_gen/gen/$name.g.dart' as _$name;");
     }
   }
 
@@ -70,7 +71,7 @@ class GenerateEntryFile {
   void createMethod(CreatedFile createdFile, List<String> constantFields,
       StringBuffer buffer) {
     var request = createdFile.request;
-    var name = request.name;
+    var name = '_${request.name}';
     buffer.write('Future<$name.Response> ${camel(name)}($name.Request request');
 
     var methodParams = request.placeholders
@@ -102,7 +103,7 @@ class GenerateEntryFile {
       return Future.error('Status \${res.statusCode}: \${res.body}');
     }
     
-    return $name.Response.fromJson(jsonDecode(res.body));
+    return $name.Response.fromJson(jsonDecode(res.body), Header.fromMap(res.headers));
     }
         ''');
   }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:ondemand_wrapper_gen/creating.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generator.dart';
+import 'package:ondemand_wrapper_gen/generator/entry_file.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
 
 typedef CreateGenerator = ClassGenerator Function(
@@ -33,5 +34,9 @@ void main(List<String> arguments) {
   generateDirectory.createSync();
 
   var creator = Creator();
-  creator.create(generateDirectory, bruh);
+  var created = creator.createWrapper(generateDirectory, bruh, true);
+
+  var entryCreator = GenerateEntryFile();
+  var createdEntry = entryCreator.generate('OnDemand', created, ['siteNumber']);
+  [generateDirectory, 'ondemand.g.dart'].file.writeAsStringSync(createdEntry);
 }

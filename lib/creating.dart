@@ -5,7 +5,8 @@ import 'package:ondemand_wrapper_gen/generator.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
 
 class Creator {
-  void create(Directory generateDirectory, Map<String, List<Entry>> entries) {
+  /// Creates classes from entries. Returns the list of files created.
+  List<CreatedFile> createWrapper(Directory generateDirectory, Map<String, List<Entry>> entries, [bool write = true]) {
     final settings = GeneratorSettings.defaultSettings().copyWith(
         childrenRequireAggregation: true,
         forceBaseClasses: true,
@@ -71,7 +72,7 @@ class Creator {
             ...multiRequest('KitchenRequest', 'kitchenRequests'),
             'response[]': 'Kitchen',
             'response#response': 'kitchens',
-            'response': 'kitchens',
+            // 'response': 'kitchens',
           },
           forceCounting: [
             'response'
@@ -201,10 +202,7 @@ class Creator {
           placeholders: ['siteNumber', 'contextId']),
     ];
 
-    print('allData = ${entries.keys}');
-
-    // var request = requests.firstWhere((element) => element.url.endsWith('get-items'));
-
+    var createdFiles = <CreatedFile>[];
     var usedUrls = <String>[];
     for (var request in requests) {
       print('URL = ${request.url}');
@@ -214,14 +212,15 @@ class Creator {
       var urls = placeholderData.map((e) => e.url).toList();
 
       var outFile = [generateDirectory, '${request.name}.g.dart'].file;
-      outFile.writeAsString(generate(entries, request.name, urls, generator));
+
+      if (write) {
+        outFile.writeAsString(generate(entries, request.name, urls, generator));
+      }
+
+      createdFiles.add(CreatedFile(request, outFile));
     }
 
-    // https://ondemand.rit.edu/static/assets/manifest.json
-    // var request = requests.firstWhere((element) => element.url
-    //     .contains('https://ondemand.rit.edu/static/assets/manifest.json'));
-    // var placeholderData = getPlaceholdered(request.url, entries.keys.toList());
-    // print('pla = $placeholderData for ${request.url}');
+    return createdFiles;
   }
 
   String generate(Map<String, List<Entry>> allData, String name,
@@ -229,11 +228,8 @@ class Creator {
     var aggregated = aggregateList(allData, urls);
 
     if (aggregated == null) {
-      print('agg null');
       return null;
     }
-
-    print('genning $urls');
 
     var method = getMethod(allData, urls.first);
     var gen = ClassGenerator.fromSettings(
@@ -299,6 +295,13 @@ class Creator {
         '$name.$name': className,
         '$name#$name': fieldName,
       };
+}
+
+class CreatedFile {
+  final Request request;
+  final File created;
+
+  CreatedFile(this.request, this.created);
 }
 
 class Request {

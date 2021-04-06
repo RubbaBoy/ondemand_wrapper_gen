@@ -61,7 +61,7 @@ class ClassGenerator {
 
   /// If there is no request or response body for the given request. (And if the
   /// response both should be ignored)
-  final bool unbodiedRequest;
+  final bool unbodiedResponse;
 
   /// The JSON path of the object containing multiple objects, all with names
   /// as a number. This will force ALL children members into a single object.
@@ -109,7 +109,7 @@ class ClassGenerator {
     this.shareClasses = true,
     this.finalizeFields = true,
     this.combineNameTransformers = false,
-    this.unbodiedRequest = false,
+    this.unbodiedResponse = false,
     this.commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
@@ -145,7 +145,7 @@ class ClassGenerator {
           shareClasses: settings.shareClasses,
           finalizeFields: settings.finalizeFields,
           combineNameTransformers: settings.combineNameTransformers,
-          unbodiedRequest: settings.unbodiedRequest,
+          unbodiedResponse: settings.unbodiedResponse,
           commentGenerator: settings.commentGenerator,
           nameTransformer: settings.nameTransformer,
           arrayTransformer: settings.arrayTransformer,
@@ -153,8 +153,7 @@ class ClassGenerator {
           staticArrayTransformer: settings.staticArrayTransformer,
           forceObjectCounting: settings.forceObjectCounting);
 
-  /// The latter 2 params are ignored
-  String generated(Map<String, dynamic> json, bool hasRequestBody, bool hasResponseBody) {
+  String generated(Map<String, dynamic> json) {
     json = Map.unmodifiable(json);
     var string = StringBuffer();
 
@@ -315,12 +314,14 @@ class ClassGenerator {
       jsonType = JsonType.Array;
     }
 
+    var hasBody = !(unbodiedResponse && context.jsonPath == 'response');
+
     [
       (buffer, context, fields) =>
           fieldGenerator(buffer, context, fields, finalizeFields),
       (buffer, context, fields) => constructorGenerator(buffer, context, fields, requireHeader),
       (buffer, context, fields) => getKey(buffer, context, fields, jsonType),
-      (buffer, context, fields) => fromJson(buffer, context, fields, jsonType, requireHeader),
+      (buffer, ClassContext context, fields) => fromJson(buffer, context, fields, jsonType, requireHeader, hasBody),
       (buffer, context, fields) => toJson(buffer, context, fields, jsonType),
       ...extraGenerators,
     ].forEach((generator) {
@@ -403,7 +404,7 @@ class GeneratorSettings {
   final bool shareClasses;
   final bool finalizeFields;
   final bool combineNameTransformers;
-  final bool unbodiedRequest;
+  final bool unbodiedResponse;
   final BlockCommentGenerator commentGenerator;
   final NameTransformer nameTransformer;
   final NameTransformer arrayTransformer;
@@ -421,7 +422,7 @@ class GeneratorSettings {
         shareClasses: true,
         finalizeFields: true,
         combineNameTransformers: false,
-        unbodiedRequest: false,
+        unbodiedResponse: false,
         staticNameTransformer: const {},
         staticArrayTransformer: const {},
         forceObjectCounting: const [],
@@ -442,7 +443,7 @@ class GeneratorSettings {
       this.shareClasses,
       this.finalizeFields,
       this.combineNameTransformers,
-      this.unbodiedRequest,
+      this.unbodiedResponse,
       this.commentGenerator,
       this.nameTransformer,
       this.arrayTransformer,
@@ -467,7 +468,7 @@ class GeneratorSettings {
         shareClasses: merging.shareClasses ?? fallback.shareClasses,
         finalizeFields: merging.finalizeFields ?? fallback.finalizeFields,
         combineNameTransformers: merging.combineNameTransformers ?? fallback.combineNameTransformers,
-        unbodiedRequest: merging.unbodiedRequest ?? fallback.unbodiedRequest,
+        unbodiedResponse: merging.unbodiedResponse ?? fallback.unbodiedResponse,
         commentGenerator: merging.commentGenerator ?? fallback.commentGenerator,
         nameTransformer: merging.nameTransformer ?? fallback.nameTransformer,
         arrayTransformer: merging.arrayTransformer ?? fallback.arrayTransformer,
@@ -496,7 +497,7 @@ class GeneratorSettings {
     bool shareClasses,
     bool finalizeFields,
     bool combineNameTransformers,
-    bool unbodiedRequest,
+    bool unbodiedResponse,
     BlockCommentGenerator commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
@@ -517,7 +518,7 @@ class GeneratorSettings {
             shareClasses: shareClasses,
             finalizeFields: finalizeFields,
             combineNameTransformers: combineNameTransformers,
-            unbodiedRequest: unbodiedRequest,
+            unbodiedResponse: unbodiedResponse,
             commentGenerator: commentGenerator,
             nameTransformer: nameTransformer,
             arrayTransformer: arrayTransformer,

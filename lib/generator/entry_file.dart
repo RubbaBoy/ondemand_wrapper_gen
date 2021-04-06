@@ -35,8 +35,6 @@ class GenerateEntryFile {
   }
 
   void generateImports(List<CreatedFile> createdFiles, StringBuffer buffer) {
-    buffer.writeln("import 'dart:convert';");
-    buffer.writeln("import 'package:http/http.dart' as http;");
     buffer.writeln("import 'base.g.dart';");
 
     for (var file in createdFiles) {
@@ -94,16 +92,21 @@ class GenerateEntryFile {
       buffer.write('}');
     }
 
+    var bodyParam = '';
+    if (!createdFile.unbodiedResponse) {
+      bodyParam = 'await res.json(), ';
+    }
+
     buffer.writeln(
         '''
     ) async {
     
-    var res = await http.${createdFile.method.toLowerCase()}(Uri.parse('${replaceParams(request.url, request.placeholders)}'));
+    var res = await ${createdFile.method.toLowerCase()}('${replaceParams(request.url, request.placeholders)}', request);
     if (res.statusCode != 200) {
-      return Future.error('Status \${res.statusCode}: \${res.body}');
+      return Future.error('Status \${res.statusCode}: \${await res.text()}');
     }
     
-    return $name.Response.fromJson(jsonDecode(res.body), Header.fromMap(res.headers));
+    return $name.Response.fromJson(${bodyParam}res.headers);
     }
         ''');
   }

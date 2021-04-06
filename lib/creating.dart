@@ -219,7 +219,7 @@ class Creator {
         outFile.writeAsString(generatedFile.generated);
       }
 
-      createdFiles.add(CreatedFile(request, outFile, generatedFile.method));
+      createdFiles.add(CreatedFile(request, outFile, generatedFile.method, generatedFile.unbodiedResponse));
     }
 
     return createdFiles;
@@ -235,9 +235,9 @@ class Creator {
 
     var method = getMethod(allData, urls.first);
     var gen = ClassGenerator.fromSettings(
-        settings.copyWith(url: urls.first, method: method));
+        settings.copyWith(url: urls.first, method: method, unbodiedResponse: !aggregated.hasResponseBody));
     print(urls.first);
-    return _GeneratedFile(gen.generated(aggregated.aggregated, aggregated.hasRequestBody, aggregated.hasResponseBody), method);
+    return _GeneratedFile(gen.generated(aggregated.aggregated), method, !aggregated.hasResponseBody);
   }
 
   String getMethod(Map<String, List<Entry>> allData, String url) =>
@@ -307,15 +307,17 @@ class CreatedFile {
   final Request request;
   final File created;
   final String method;
+  final bool unbodiedResponse;
 
-  CreatedFile(this.request, this.created, this.method);
+  CreatedFile(this.request, this.created, this.method, this.unbodiedResponse);
 }
 
 class _GeneratedFile {
   final String generated;
   final String method;
+  final bool unbodiedResponse;
 
-  _GeneratedFile(this.generated, this.method);
+  _GeneratedFile(this.generated, this.method, this.unbodiedResponse);
 }
 
 class _AggregatedResponse {

@@ -23,7 +23,7 @@ void fieldGenerator(StringBuffer buffer, ClassContext context,
 
 void constructorGenerator(StringBuffer buffer, ClassContext context,
     List<ElementInfo> fields, bool requireHeader) {
-  if (fields.isEmpty) {
+  if (fields.isEmpty && !requireHeader) {
     return;
   }
 
@@ -36,7 +36,7 @@ void constructorGenerator(StringBuffer buffer, ClassContext context,
     }
 
     if (name == null) {
-      buffer.write('List<Header> headers');
+      buffer.write('HttpHeaders headers');
     } else {
       buffer.write('this.$name');
     }
@@ -52,7 +52,7 @@ void constructorGenerator(StringBuffer buffer, ClassContext context,
 }
 
 void fromJson(StringBuffer buffer, ClassContext context,
-    List<ElementInfo> fields, JsonType jsonType, bool requireHeader) {
+    List<ElementInfo> fields, JsonType jsonType, bool requireHeader, bool hasBody) {
   if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
     buffer.write('${context.name}.fromJson(');
 
@@ -62,10 +62,16 @@ void fromJson(StringBuffer buffer, ClassContext context,
       buffer.write('this.${countingKey.dartName}, ');
     }
 
-    buffer.write('Map<String, dynamic> json');
+    if (hasBody) {
+      buffer.write('Map<String, dynamic> json');
+    }
 
     if (requireHeader) {
-      buffer.write(', List<Header> headers');
+      if (hasBody) {
+        buffer.write(', ');
+      }
+
+      buffer.write('HttpHeaders headers');
     }
 
     buffer.write(')');
@@ -104,7 +110,7 @@ void fromJson(StringBuffer buffer, ClassContext context,
     buffer.write('${context.name}.fromJson(dynamic json');
 
     if (requireHeader) {
-      buffer.write(', List<Header> headers');
+      buffer.write(', HttpHeaders headers');
     }
 
     buffer.writeln(') :');
@@ -123,6 +129,7 @@ void fromJson(StringBuffer buffer, ClassContext context,
 void toJson(StringBuffer buffer, ClassContext context, List<ElementInfo> fields,
     JsonType jsonType) {
   if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
+    buffer.writeln('@override');
     buffer.writeln('Map<String, dynamic> toJson() => {');
     fields.where((field) => !field.countingKey).forEachI((index, info) {
       if (index != 0) {

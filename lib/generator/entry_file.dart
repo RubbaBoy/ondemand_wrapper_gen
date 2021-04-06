@@ -1,11 +1,8 @@
-import 'dart:convert';
 
 import 'package:dart_style/dart_style.dart';
-import 'package:http/http.dart' as http;
 import 'package:ondemand_wrapper_gen/creating.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
-import 'package:ondemand_wrapper_gen/gen/list_places.g.dart' as list_places;
-import 'package:ondemand_wrapper_gen/generator.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generate_utils.dart';
 
 final _formatter = DartFormatter();
 
@@ -34,7 +31,6 @@ class GenerateEntryFile {
     createdFiles.forEach((e) => createMethod(e, constantFields, res));
 
     res.writeln('}');
-    print(res.toString());
     return formatOutput(res.toString());
   }
 
@@ -118,21 +114,5 @@ class GenerateEntryFile {
   String replaceParams(String string, List<String> placeholders) {
     var index = 0;
     return string.replaceAllMapped(RegExp(r'\$'), (_) => '\$${placeholders[index++]}');
-  }
-}
-
-class OnDemandAccess {
-  final int site;
-
-  OnDemandAccess({this.site = 1312});
-
-  Future<list_places.Response> listPlaces(list_places.Request request,
-      {String contextId, String displayId}) async {
-    var res = await http.post(Uri.parse(
-        'https://ondemand.rit.edu/api/sites/$site/$contextId/concepts/$displayId'));
-    if (res.statusCode != 200) {
-      return Future.error('Status ${res.statusCode}: ${res.body}');
-    }
-    return list_places.Response.fromJson(jsonDecode(res.body));
   }
 }

@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:ondemand_wrapper_gen/extensions.dart';
-import 'package:ondemand_wrapper_gen/generator.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generate_utils.dart';
 import 'package:ondemand_wrapper_gen/hmmm.dart';
+
+import 'file:///E:/ondemand_wrapper_gen/lib/generator/class/generator.dart';
 
 class Creator {
   /// Creates classes from entries. Returns the list of files created.

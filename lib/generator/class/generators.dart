@@ -1,6 +1,8 @@
-import 'package:ondemand_wrapper_gen/generator.dart';
+import 'package:ondemand_wrapper_gen/extensions.dart';
 
-import 'extensions.dart';
+import 'file:///E:/ondemand_wrapper_gen/lib/generator/class/generator.dart';
+
+import 'generate_elements.dart';
 
 void fieldGenerator(
     StringBuffer buffer, ClassContext context, List<ElementInfo> fields, bool finalizeFields) {

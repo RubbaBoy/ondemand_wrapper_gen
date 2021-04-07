@@ -211,7 +211,7 @@ class ElementType {
         }
 
         var e = generateTempVar('e', depth);
-        return '\$.map(($e) => ${arrayType.generateToJson(info.arrayInfo).replaceAll('\$', e)}).toList()';
+        return '\$?.map(($e) => ${arrayType.generateToJson(info.arrayInfo).replaceAll('\$', e)})?.toList()';
       }),
       generateFromJson:
       GenerateJsonSidedCode((jsonName, dartName, info, depth) {
@@ -223,11 +223,11 @@ class ElementType {
           }
 
           var listDef = depth > 0 ? '(\$ as List)' : '\$';
-          return '$listDef.cast<${arrayType.generateTypeString(info)}>()';
+          return '$listDef?.cast<${arrayType.generateTypeString(info)}>()';
         }
 
         var e = generateTempVar('e', depth);
-        return '(\$ as List).map(($e) => ${arrayType.generateFromJson(info.arrayInfo, depth + 1).replaceAll('\$', e)}).toList()';
+        return '(\$ as List)?.map(($e) => ${arrayType.generateFromJson(info.arrayInfo, depth + 1).replaceAll('\$', e)})?.toList()';
       }));
 
   /// This is a placeholder for new classes being created
@@ -237,9 +237,9 @@ class ElementType {
       generateTypeString:
       GenerateSimpleCode((dartName, info) => info.objectName),
       generateToJson:
-      GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$.toJson()'),
+      GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$?.toJson()'),
       generateFromJson: GenerateJsonSidedCode(
-              (jsonName, dartName, info, _) => '${info.objectName}.fromJson(\$)'));
+              (jsonName, dartName, info, _) => '${info.objectName}.fromJson(\$ ?? {})'));
 
   static final KeyedObject = ElementType._('KeyedObject',
       primitive: false,
@@ -248,7 +248,7 @@ class ElementType {
       'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
       generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
         var e = generateTempVar('e', depth);
-        return 'Map.fromIterables(\$.map(($e) => $e.getKey()), \$.map(($e) => ${info.arrayInfo.type.generateToJson(info.arrayInfo, depth + 1).replaceAll('\$', e)}))';
+        return 'Map.fromIterables(\$?.map(($e) => $e.getKey()), \$?.map(($e) => ${info.arrayInfo.type.generateToJson(info.arrayInfo, depth + 1).replaceAll('\$', e)}))';
       }),
       generateFromJson:
       GenerateJsonSidedCode((jsonName, dartName, info, depth) {

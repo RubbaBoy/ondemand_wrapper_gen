@@ -106,7 +106,7 @@ class GenerateEntryFile {
       return Future.error('Status \${res.statusCode}: \${await res.text()}');
     }
     
-    return $name.Response.fromJson(${bodyParam}res.headers);
+    return $name.Response.fromJson(${bodyParam}res.headers.toMap());
     }
         ''');
   }

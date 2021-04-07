@@ -36,7 +36,7 @@ void constructorGenerator(StringBuffer buffer, ClassContext context,
     }
 
     if (name == null) {
-      buffer.write('HttpHeaders headers');
+      buffer.write('Map<String, String> headers = const {}');
     } else {
       buffer.write('this.$name');
     }
@@ -71,7 +71,7 @@ void fromJson(StringBuffer buffer, ClassContext context,
         buffer.write(', ');
       }
 
-      buffer.write('HttpHeaders headers');
+      buffer.write('Map<String, String> headers');
     }
 
     buffer.write(')');
@@ -110,7 +110,7 @@ void fromJson(StringBuffer buffer, ClassContext context,
     buffer.write('${context.name}.fromJson(dynamic json');
 
     if (requireHeader) {
-      buffer.write(', HttpHeaders headers');
+      buffer.write(', Map<String, String> headers');
     }
 
     buffer.writeln(') :');
@@ -129,7 +129,6 @@ void fromJson(StringBuffer buffer, ClassContext context,
 void toJson(StringBuffer buffer, ClassContext context, List<ElementInfo> fields,
     JsonType jsonType) {
   if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
-    buffer.writeln('@override');
     buffer.writeln('Map<String, dynamic> toJson() => {');
     fields.where((field) => !field.countingKey).forEachI((index, info) {
       if (index != 0) {

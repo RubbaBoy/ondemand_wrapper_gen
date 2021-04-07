@@ -52,7 +52,7 @@ void constructorGenerator(StringBuffer buffer, ClassContext context,
 }
 
 void fromJson(StringBuffer buffer, ClassContext context,
-    List<ElementInfo> fields, JsonType jsonType, bool requireHeader, bool hasBody) {
+    List<ElementInfo> fields, List<String> forceToString, JsonType jsonType, bool requireHeader, bool hasBody) {
   if (jsonType == JsonType.Object || jsonType == JsonType.KeyedObject) {
     buffer.write('${context.name}.fromJson(');
 
@@ -88,7 +88,7 @@ void fromJson(StringBuffer buffer, ClassContext context,
         buffer.write(',\n');
       }
       buffer.write(
-          '${info.dartName} = ${info.type.generateFromJson(info).replaceAll('\$', "json['${info.jsonName}']")}');
+          '${info.dartName} = ${info.type.generateFromJson(info, forceToString).replaceAll('\$', "json['${info.jsonName}']")}');
     });
 
     if (requireHeader) {
@@ -116,7 +116,7 @@ void fromJson(StringBuffer buffer, ClassContext context,
     buffer.writeln(') :');
 
     buffer.writeln(
-        '${first.dartName} = ${first.type.generateFromJson(first).replaceAll('\$', 'json')}');
+        '${first.dartName} = ${first.type.generateFromJson(first, forceToString).replaceAll('\$', 'json')}');
 
     if (requireHeader) {
       buffer.writeln(', super(headers)');

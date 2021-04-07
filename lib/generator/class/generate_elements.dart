@@ -26,20 +26,20 @@ class ElementInfo {
   /// normally serialized.
   ElementInfo._(this.type,
       {@required this.jsonPath,
-        this.jsonName = '',
-        this.dartName,
-        this.arrayInfo,
-        this.objectName,
-        this.countingKey = false});
+      this.jsonName = '',
+      this.dartName,
+      this.arrayInfo,
+      this.objectName,
+      this.countingKey = false});
 
   factory ElementInfo(ElementType type,
-      {@required ClassGenerator generator,
-        @required String parentPath,
-        String jsonName = '',
-        String dartName,
-        ElementInfo arrayInfo,
-        String objectName,
-        bool countingKey = false}) =>
+          {@required ClassGenerator generator,
+          @required String parentPath,
+          String jsonName = '',
+          String dartName,
+          ElementInfo arrayInfo,
+          String objectName,
+          bool countingKey = false}) =>
       ElementInfo._(type,
           jsonPath: '$parentPath#$jsonName',
           jsonName: jsonName,
@@ -60,11 +60,11 @@ class ElementInfo {
   factory ElementInfo.fromElement(
       ClassGenerator classGenerator, String jsonPath,
       {dynamic singleElement,
-        List listElement = const [],
-        String jsonName = '',
-        bool forceSeparateArrays = false,
-        ElementType forceType,
-        String dartName}) {
+      List listElement = const [],
+      String jsonName = '',
+      bool forceSeparateArrays = false,
+      ElementType forceType,
+      String dartName}) {
     if (listElement.isEmpty) {
       listElement = [singleElement, ...listElement];
     }
@@ -100,13 +100,13 @@ class ElementInfo {
       }
 
       var arrayType =
-      getArrayType(classGenerator, creatingName, jsonPath, element);
+          getArrayType(classGenerator, creatingName, jsonPath, element);
 
       if (forceSeparateArrays) {
         // Create the outer containing class
         var creatingPath = '$jsonPath.$jsonName'; // jsonName[]
         var containingTypeName =
-        classGenerator.createClassName(creatingPath, jsonName);
+            classGenerator.createClassName(creatingPath, jsonName);
 
         // The name of the class being created
         creatingName = classGenerator.createClassName(creatingPath,
@@ -201,8 +201,9 @@ class ElementType {
       primitive: false,
       valueTest: (e) => e is List,
       generateTypeString: GenerateSimpleCode((dartName, info) =>
-      'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
-      generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+          'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
+      generateToJson:
+          GenerateJsonSidedCode((jsonName, dartName, info, depth, _) {
         var arrayType = info.arrayInfo.type;
         if (arrayType.primitive ||
             (arrayType == ElementType.Array &&
@@ -213,8 +214,8 @@ class ElementType {
         var e = generateTempVar('e', depth);
         return '\$?.map(($e) => ${arrayType.generateToJson(info.arrayInfo).replaceAll('\$', e)})?.toList()';
       }),
-      generateFromJson:
-      GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+      generateFromJson: GenerateJsonSidedCode(
+          (jsonName, dartName, info, depth, forceToString) {
         var arrayType = info.arrayInfo.type;
         if (arrayType.primitive) {
           if (arrayType == ElementType.Mixed ||
@@ -227,7 +228,7 @@ class ElementType {
         }
 
         var e = generateTempVar('e', depth);
-        return '(\$ as List)?.map(($e) => ${arrayType.generateFromJson(info.arrayInfo, depth + 1).replaceAll('\$', e)})?.toList()';
+        return '(\$ as List)?.map(($e) => ${arrayType.generateFromJson(info.arrayInfo, forceToString, depth + 1).replaceAll('\$', e)})?.toList()';
       }));
 
   /// This is a placeholder for new classes being created
@@ -235,25 +236,27 @@ class ElementType {
       primitive: false,
       valueTest: (v) => v is Map,
       generateTypeString:
-      GenerateSimpleCode((dartName, info) => info.objectName),
-      generateToJson:
-      GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$?.toJson()'),
+          GenerateSimpleCode((dartName, info) => info.objectName),
+      generateToJson: GenerateJsonSidedCode(
+          (jsonName, dartName, info, _, __) => '\$?.toJson()'),
       generateFromJson: GenerateJsonSidedCode(
-              (jsonName, dartName, info, _) => '${info.objectName}.fromJson(\$ ?? {})'));
+          (jsonName, dartName, info, _, __) =>
+              '${info.objectName}.fromJson(\$ ?? {})'));
 
   static final KeyedObject = ElementType._('KeyedObject',
       primitive: false,
       valueTest: (_) => false,
       generateTypeString: GenerateSimpleCode((dartName, info) =>
-      'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
-      generateToJson: GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+          'List<${info.arrayInfo.type.generateTypeString(info.arrayInfo)}>'),
+      generateToJson: GenerateJsonSidedCode(
+          (jsonName, dartName, info, depth, forceToString) {
         var e = generateTempVar('e', depth);
-        return 'Map.fromIterables(\$?.map(($e) => $e.getKey()), \$?.map(($e) => ${info.arrayInfo.type.generateToJson(info.arrayInfo, depth + 1).replaceAll('\$', e)}))';
+        return 'Map.fromIterables(\$?.map(($e) => $e.getKey()), \$?.map(($e) => ${info.arrayInfo.type.generateToJson(info.arrayInfo, forceToString, depth + 1).replaceAll('\$', e)}))';
       }),
-      generateFromJson:
-      GenerateJsonSidedCode((jsonName, dartName, info, depth) {
+      generateFromJson: GenerateJsonSidedCode(
+          (jsonName, dartName, info, depth, forceToString) {
         var e = generateTempVar('e', depth);
-        return 'json.keys.map(($e) => ${info.arrayInfo.type.generateFromJson(info.arrayInfo, depth + 1).replaceAll('\$', '$e, json[$e]')}).toList()';
+        return 'json.keys.map(($e) => ${info.arrayInfo.type.generateFromJson(info.arrayInfo, forceToString, depth + 1).replaceAll('\$', '$e, json[$e]')}).toList()';
       }));
 
   /// Used for objects with no defined type, i.e. empty arrays' types.
@@ -332,22 +335,23 @@ class ElementType {
   /// ```
   ElementType._(this.name,
       {this.primitive = true,
-        bool Function(dynamic value) valueTest,
-        Type type,
-        core.String typeString,
-        this.generateTypeString,
-        this.generate,
-        this.generateToJson,
-        this.generateFromJson})
+      bool Function(dynamic value) valueTest,
+      Type type,
+      core.String typeString,
+      this.generateTypeString,
+      this.generate,
+      this.generateToJson,
+      this.generateFromJson})
       : _typeTest = valueTest ?? ((value) => value.runtimeType == type) {
     generate ??= GenerateSimpleCode(
-            (dartName, info) => '${generateTypeString(info)} $dartName;');
+        (dartName, info) => '${generateTypeString(info)} $dartName;');
     generateTypeString ??=
         GenerateSimpleCode((dartName, _) => typeString ?? type?.toString());
     generateToJson ??=
-        GenerateJsonSidedCode((jsonName, dartName, info, _) => dartName);
-    generateFromJson ??=
-        GenerateJsonSidedCode((jsonName, dartName, info, _) => '\$');
+        GenerateJsonSidedCode((jsonName, dartName, info, _, __) => dartName);
+    generateFromJson ??= GenerateJsonSidedCode(
+        (jsonName, dartName, info, _, forceToString) =>
+            '\$${forceToString.contains(info.jsonPath) ? '.toString()' : ''}');
   }
 
   /// Performs a test to check if the [value] is of the current type.
@@ -367,13 +371,14 @@ class ElementType {
 /// [depth] is 0. If it's called again from within the generation, it should be
 /// 1, etc.
 class GenerateJsonSidedCode {
-  final String Function(
-      String jsonName, String dartName, ElementInfo info, int depth) generate;
+  final String Function(String jsonName, String dartName, ElementInfo info,
+      int depth, List<String> forceToString) generate;
 
   GenerateJsonSidedCode(this.generate);
 
-  String call(ElementInfo info, [int depth = 0]) =>
-      generate(info.jsonName, info.dartName, info, depth);
+  String call(ElementInfo info,
+          [List<String> forceToString = const [], int depth = 0]) =>
+      generate(info.jsonName, info.dartName, info, depth, forceToString);
 }
 
 /// Used for generating code using the JSON name, Dart name, and extra

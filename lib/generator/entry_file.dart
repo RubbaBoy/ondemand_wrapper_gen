@@ -25,6 +25,7 @@ class GenerateEntryFile {
 
     res.writeln('\nclass $name {');
 
+    res.writeln('Map<String, String> baseHeaders = {};');
     createConstructor(name, constantFields, res);
     res.writeln();
 
@@ -101,7 +102,7 @@ class GenerateEntryFile {
         '''
     ) async {
     
-    var res = await ${createdFile.method.toLowerCase()}('${replaceParams(request.url, request.placeholders)}', request);
+    var res = await ${createdFile.method.toLowerCase()}('${replaceParams(request.url, request.placeholders)}', request, {...request.headers, ...baseHeaders});
     if (res.statusCode != 200) {
       return Future.error('Status \${res.statusCode}: \${await res.text()}');
     }

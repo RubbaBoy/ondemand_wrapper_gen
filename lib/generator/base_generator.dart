@@ -7,7 +7,7 @@ import 'dart:io';
 export 'dart:io';
 
 abstract class BaseRequest {
-  final Map<String, String> headers;
+  Map<String, String> headers;
 
   BaseRequest(this.headers);
 
@@ -15,7 +15,7 @@ abstract class BaseRequest {
 }
 
 abstract class BaseResponse {
-  final Map<String, String> headers;
+  Map<String, String> headers;
 
   BaseResponse(this.headers);
 
@@ -24,14 +24,14 @@ abstract class BaseResponse {
 
 final httpClient = HttpClient()..badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
 
-Future<HttpClientResponse> get(String url, BaseRequest baseRequest) async =>
-    await _startRequest('GET', url, baseRequest.headers);
+Future<HttpClientResponse> get(String url, BaseRequest baseRequest, Map<String, String> headers) async =>
+    await _startRequest('GET', url, headers);
 
-Future<HttpClientResponse> put(String url, BaseRequest baseRequest) async =>
-    await _startRequest('PUT', url, baseRequest.headers);
+Future<HttpClientResponse> put(String url, BaseRequest baseRequest, Map<String, String> headers) async =>
+    await _startRequest('PUT', url, headers);
 
-Future<HttpClientResponse> post(String url, BaseRequest baseRequest) async =>
-    await _startRequest('POST', url, baseRequest.headers, baseRequest.toJson());
+Future<HttpClientResponse> post(String url, BaseRequest baseRequest, Map<String, String> headers) async =>
+    await _startRequest('POST', url, headers, baseRequest.toJson());
 
 Future<HttpClientResponse> _startRequest(
     String method, String url, Map<String, String> headers,

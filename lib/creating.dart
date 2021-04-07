@@ -53,7 +53,10 @@ class Creator {
           forceCounting: [
             'response.response.pickUpConfig.conceptEntries',
             'response.response.atriumConfig.tenders'
-          ]),
+          ],
+      forceToString: [
+        'response.response.atriumConfig#terminalId'
+      ]),
 
       // Gets the manifest
       Request('get_manifest',
@@ -342,12 +345,14 @@ class Request {
 
   final List<String> forceCounting;
 
+  final List<String> forceToString;
+
   Request(this.name, this.url,
-      {this.placeholders = const [], this.nameMap, this.forceCounting});
+      {this.placeholders = const [], this.nameMap, this.forceCounting, this.forceToString = const []});
 
   /// Gets the settings with the base (or default) of [base].
   GeneratorSettings getSettings(GeneratorSettings base) => base.copyWith(
-      staticNameTransformer: nameMap, forceObjectCounting: forceCounting);
+      staticNameTransformer: nameMap, forceObjectCounting: forceCounting, forceToString: forceToString);
 }
 
 /// The [placeholderUrls] is a list of placeholder URLs.

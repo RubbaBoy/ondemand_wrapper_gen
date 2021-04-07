@@ -79,6 +79,11 @@ class ClassGenerator {
   /// the name 1. Used for varying dynamic keys.
   final List<String> forceObjectCounting;
 
+  /// Forces the given list of JSON path fields to have `#toString()` invoked
+  /// upon them before setting them to a field. This is to help combat
+  /// inconsistencies of ints and strings present in the Agilysys OnDemand API.
+  final List<String> forceToString;
+
   /// Name, Content
   final classes = <String, String>{};
 
@@ -116,6 +121,7 @@ class ClassGenerator {
     Map<String, String> staticNameTransformer = const {},
     Map<String, String> staticArrayTransformer = const {},
     this.forceObjectCounting = const [],
+    this.forceToString = const [],
   }) : formatOutput = formatOutput ?? _formatter.format {
 
     var backupNameTransformer = nameTransformer ?? identitySecond;
@@ -151,7 +157,8 @@ class ClassGenerator {
           arrayTransformer: settings.arrayTransformer,
           staticNameTransformer: settings.staticNameTransformer,
           staticArrayTransformer: settings.staticArrayTransformer,
-          forceObjectCounting: settings.forceObjectCounting);
+          forceObjectCounting: settings.forceObjectCounting,
+          forceToString: settings.forceToString);
 
   String generated(Map<String, dynamic> json) {
     json = Map.unmodifiable(json);
@@ -321,7 +328,7 @@ class ClassGenerator {
           fieldGenerator(buffer, context, fields, finalizeFields),
       (buffer, context, fields) => constructorGenerator(buffer, context, fields, requireHeader),
       (buffer, context, fields) => getKey(buffer, context, fields, jsonType),
-      (buffer, ClassContext context, fields) => fromJson(buffer, context, fields, jsonType, requireHeader, hasBody),
+      (buffer, ClassContext context, fields) => fromJson(buffer, context, fields, forceToString, jsonType, requireHeader, hasBody),
       (buffer, context, fields) => toJson(buffer, context, fields, jsonType),
       ...extraGenerators,
     ].forEach((generator) {
@@ -411,6 +418,7 @@ class GeneratorSettings {
   final Map<String, String> staticNameTransformer;
   final Map<String, String> staticArrayTransformer;
   final List<String> forceObjectCounting;
+  final List<String> forceToString;
 
   /// Creates a [GeneratorSettings] with the default values.
   factory GeneratorSettings.defaultSettings() => GeneratorSettings(
@@ -426,6 +434,7 @@ class GeneratorSettings {
         staticNameTransformer: const {},
         staticArrayTransformer: const {},
         forceObjectCounting: const [],
+        forceToString: const [],
       );
 
   /// Creates a [GeneratorSettings] with all null values. Suggested as the
@@ -449,7 +458,8 @@ class GeneratorSettings {
       this.arrayTransformer,
       this.staticNameTransformer,
       this.staticArrayTransformer,
-      this.forceObjectCounting});
+      this.forceObjectCounting,
+      this.forceToString});
 
   /// Creates a [GeneratorSettings] with the same values as [merging] but in
   /// the case of null values, using [fallback].
@@ -478,6 +488,8 @@ class GeneratorSettings {
             merging.staticArrayTransformer ?? fallback.staticArrayTransformer,
         forceObjectCounting:
             merging.forceObjectCounting ?? fallback.forceObjectCounting,
+        forceToString:
+            merging.forceToString ?? fallback.forceToString,
       );
 
   /// The same as merging settings with the [merging] be [newValues] and the
@@ -504,6 +516,7 @@ class GeneratorSettings {
     Map<String, String> staticNameTransformer,
     Map<String, String> staticArrayTransformer,
     List<String> forceObjectCounting,
+    List<String> forceToString,
   }) =>
       GeneratorSettings.mergeSettings(
           GeneratorSettings(
@@ -525,6 +538,7 @@ class GeneratorSettings {
             staticNameTransformer: staticNameTransformer,
             staticArrayTransformer: staticArrayTransformer,
             forceObjectCounting: forceObjectCounting,
+            forceToString: forceToString,
           ),
           this);
 }

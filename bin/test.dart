@@ -4,6 +4,8 @@ import 'package:ondemand_wrapper_gen/gen/get_kitchens.g.dart' as _get_kitchens;
 import 'package:ondemand_wrapper_gen/gen/login.g.dart' as _login;
 import 'package:ondemand_wrapper_gen/gen/ondemand.g.dart';
 
+import 'demo/init.dart';
+
 Map<String, String> env = Platform.environment;
 
 final UID = env['UID'];
@@ -57,17 +59,4 @@ Future<void> makeInquiry(OnDemand ondemand, String accessToken, String contextId
       print('${account.name}: ${account.balance} ${account.currency}');
     }
   }
-}
-
-class TenderIds {
-  static const TIGER_BUCKS = '9';
-  static const DINING_DOLLARS = '16';
-
-  static const TIGER_BUCKS_DATA = '1';
-  static const DINING_DOLLARS_DATA = '4';
-
-  static const TENDERS = <String, String>{
-    TIGER_BUCKS: 'Tiger Bucks',
-    DINING_DOLLARS: 'Dining Dollars'
-  };
 }

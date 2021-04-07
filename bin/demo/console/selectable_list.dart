@@ -5,6 +5,8 @@ import '../console.dart';
 
 class SelectableList<T> {
 
+  final Coordinate position;
+
   /// If [true], this will act as a checkbox. If [false], it will act as a
   /// radio.
   final bool multi;
@@ -28,7 +30,7 @@ class SelectableList<T> {
   /// The list index the cursor is at
   int index = 0;
 
-  SelectableList({@required this.console, @required List<T> items, this.description = 'Select the options (use arrow keys to navigate, space to select. enter to finalize)', this.multi = true, this.min = 0, this.max = 1})
+  SelectableList({@required this.console, this.position, @required List<T> items, this.description = 'Select the options (use arrow keys to navigate, space to select. enter to finalize)', this.multi = true, this.min = 0, this.max = 1})
       : items = items.map((item) => Option(item)).toList();
 
   /// Displays the list, and when everything is selected, [callback] is invoked
@@ -84,7 +86,7 @@ class SelectableList<T> {
       items.where((option) => option.selected).toList();
 
   void _redisplay() {
-    console.cursorPosition = startContent;
+    console.cursorPosition = position;
 
     for (var i = 0; i < items.length; i++) {
       var value = items[i];

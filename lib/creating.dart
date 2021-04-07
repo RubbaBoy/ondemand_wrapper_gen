@@ -100,7 +100,7 @@ class Creator {
           nameMap: multiResponse('Place', 'places')),
 
       // itemId   get_menus => request.[].menus.[].categories#item (5f121d554f05a8000c1b87df)   The food item ID (static/const)
-      // Gets an item from a menu by its itemId
+      // Gets an item from a menu by its itemId (gives more info such as childGroups)
       Request(
           'get_item', r'https://ondemand.rit.edu/api/sites/$/$/kiosk-items/$',
           placeholders: [

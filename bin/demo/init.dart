@@ -45,9 +45,7 @@ class Initialization {
     onDemand = OnDemand(siteNumber: SITE_NUMBER);
 
     await _login();
-    print('hereeee');
     config = await _getConfig();
-    print('config = $config');
 
     return onDemand;
   }
@@ -64,6 +62,9 @@ class Initialization {
   Future<_get_config.Response> _getConfig() async =>
       await onDemand.getConfig(_get_config.Request());
 }
+
+const PRICE_LEVEL = '1';
+const CURRENCY = 'USD';
 
 class TenderIds {
   static const TIGER_BUCKS = '9';

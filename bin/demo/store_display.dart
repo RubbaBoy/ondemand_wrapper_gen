@@ -1,9 +1,6 @@
-import 'init.dart';
-import 'dart:io';
-import 'package:ondemand_wrapper_gen/gen/ondemand.g.dart';
 import 'package:ondemand_wrapper_gen/gen/get_config.g.dart' as _get_config;
 import 'package:ondemand_wrapper_gen/gen/get_items.g.dart' as _get_items;
-import 'package:ondemand_wrapper_gen/gen/login.g.dart' as login;
+import 'package:ondemand_wrapper_gen/gen/login.g.dart' as _login;
 import 'package:ondemand_wrapper_gen/gen/get_kitchens.g.dart' as _get_kitchens;
 import 'package:ondemand_wrapper_gen/gen/get_manifest.g.dart' as _get_manifest;
 import 'package:ondemand_wrapper_gen/gen/decrypt_cookie.g.dart'
@@ -31,6 +28,8 @@ import 'package:ondemand_wrapper_gen/gen/send_sms.g.dart' as _send_sms;
 import 'package:ondemand_wrapper_gen/gen/get_wait_time.g.dart'
 as _get_wait_time;
 
+import 'init.dart';
+
 void main(List<String> args) => StoreDisplay().main();
 
 class StoreDisplay {
@@ -45,15 +44,94 @@ class StoreDisplay {
 
     var kitchens = await onDemand.getKitchens(_get_kitchens.Request());
     printKitchens(kitchens);
+
+    // Click "find food"
+
+    var commons = kitchens.kitchens
+        .firstWhere((kitchen) => kitchen.name == 'The Commons');
+
+    // No leads (we want as soon as possible)
+
+    var places = await onDemand.listPlaces(_list_places.Request(scheduleTime:
+    _list_places.ScheduleTime(startTime: '7:00 PM', endTime: '7:15 PM')),
+        contextId: contextId, displayId: commons.displayProfileId);
+
+    // Lists places in this kitchen (I think only one always??)
+    var place = places.places.first;
+    if (places.places.length > 1) {
+      print('Contains more than 1 place!!!');
+    }
+
+    print('Place "${place.name}"');
+    print('Available from ${place.availableAt.open} - ${place.availableAt.close} (Currently ${place.availableNow ? 'available' : 'unavailable'})');
+    print('Menus:');
+    // Menus for ??? usually only one used I think, a lot are tests
+    // for (var menu in place.menus) {
+      // print('Menu ${menu.name} (${menu.id})');
+      // Categories such as grill, sub, pizza, etc.
+      // for (var category in menu.categories) {
+        // print('\tCategory ${category.name} - ${category.items.length} items');
+      // }
+    // }
+
+    print('place id: ${place.id}');
+
+    var menus = await onDemand.getMenus(_get_menus.Request(
+        menus: place.menus.map((e) => _get_menus.Menus.fromJson(e.toJson())).toList(),
+      scheduleTime: _get_menus.ScheduleTime(startTime: '7:00 PM', endTime: '7:15 PM'),
+      schedule: place.schedule.map((e) => _get_menus.Schedule.fromJson(e.toJson())).toList(),
+      scheduledDay: 0,
+      storePriceLevel: PRICE_LEVEL,
+      currencyUnit: CURRENCY
+    ),
+        contextId: contextId,
+        displayId: commons.displayProfileId, placeId: place.id);
+
+    // The menu being used today
+    var mainMenu = menus.places.first;
+    print('The menu being used today is "${mainMenu.name}" (${mainMenu.id})');
+    print('Categories: ${mainMenu.categories.map((category) => category.name).join(', ')}');
+
+    var grillCategory = mainMenu.categories
+        .firstWhere((category) => category.name == 'Grill');
+
+    var items = await onDemand.getItems(_get_items.Request(
+      conceptId: place.id,
+      itemIds: grillCategory.items,
+      currencyUnit: CURRENCY,
+      storePriceLevel: PRICE_LEVEL,
+    ), contextId: contextId);
+
+    print('Retrieved items:');
+    for (var item in items.items) {
+      print('${item.name} ${item.price.amount} ${item.price.currencyUnit}');
+    }
+
+    var hamburger = items.items.firstWhere((item) => item.name == 'Commons Hamburger');
+
+    // If childGroups is FILLED, do get_item request (childGroups#id is the id of something idk)
+    print('ChildGroups: ${hamburger.childGroups.map((e) => e.id).toList()}');
+
+    var gotItem = await onDemand.getItem(_get_item.Request(
+        storePriceLevel: PRICE_LEVEL,
+        currencyUnit: CURRENCY,
+    ), contextId: contextId, itemID: hamburger.id);
+
+    print('Select options for ${gotItem.name}:');
+
+    print('Child groups!');
+    for (var child in gotItem.childGroups) {
+      print('${child.name} - min: ${child.minimum} max: ${child.maximum} type: ${child.groupType}');
+      for (var option in child.childItems) {
+        print('\t${option.displayText}');
+      }
+    }
   }
 
   void printKitchens(_get_kitchens.Response response) {
     print('${response.kitchens.length} kitchens found:\n');
     for (var kitchen in response.kitchens) {
-      print('${kitchen.name}');
-      print('\tOpens: ${kitchen.availableAt.opens}');
-      print('\tCloses: ${kitchen.availableAt.closes}');
-      // TODO: kitchenContextId: kitchen.kitchenSettings.kitchenContextId
+      print('${kitchen.name}\t${kitchen.availableAt.opens} - ${kitchen.availableAt.closes}');
     }
   }
 

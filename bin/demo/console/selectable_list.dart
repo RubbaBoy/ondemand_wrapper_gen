@@ -1,11 +1,14 @@
 import 'package:dart_console/dart_console.dart';
 import 'package:meta/meta.dart';
+import 'console_util.dart';
 
 import '../console.dart';
 
 class SelectableList<T> {
 
   final Coordinate position;
+
+  final int width;
 
   /// If [true], this will act as a checkbox. If [false], it will act as a
   /// radio.
@@ -30,7 +33,10 @@ class SelectableList<T> {
   /// The list index the cursor is at
   int index = 0;
 
-  SelectableList({@required this.console, this.position, @required List<T> items, this.description = 'Select the options (use arrow keys to navigate, space to select. enter to finalize)', this.multi = true, this.min = 0, this.max = 1})
+  /// The active cursor position, used for resetting.
+  Coordinate _cursor;
+
+  SelectableList({@required this.console, this.position, this.width, @required List<T> items, this.description = 'Select the options (use arrow keys to navigate, space to select. enter to finalize)', this.multi = true, this.min = 0, this.max = 1})
       : items = items.map((item) => Option(item)).toList();
 
   /// Displays the list, and when everything is selected, [callback] is invoked
@@ -77,7 +83,18 @@ class SelectableList<T> {
       _redisplay();
     }
 
+    clearView();
     callback(getSelected().map((option) => option.value).toList());
+  }
+
+  /// Clears the view and resets the cursor to [position]
+  void clearView() {
+    var bottomLeft = _cursor.copy(col: 0);
+    console.cursorPosition = bottomLeft;
+    for (var i = 0; i < _cursor.row - position.row; i++) {
+      console.write(' ' * width);
+      console.cursorPosition = bottomLeft = bottomLeft.sub(row: 1);
+    }
   }
 
   int amountSelected() => getSelected().length;
@@ -88,6 +105,7 @@ class SelectableList<T> {
   void _redisplay() {
     console.cursorPosition = position;
 
+    var row = 0;
     for (var i = 0; i < items.length; i++) {
       var value = items[i];
       console.setForegroundColor(ConsoleColor.brightBlack);
@@ -98,12 +116,18 @@ class SelectableList<T> {
       console.write('] ');
       console.resetColorAttributes();
 
-      console.write('$value');
+      var wrapped = wrapString('$value', 4, width);
+      console.write(wrapped);
       console.writeLine();
+
+      row += wrapped.split('\n').length;
     }
 
+    var printingDesc = wrapString(description, 0, width);
     console.writeLine();
-    console.writeLine(description);
+    console.writeLine(printingDesc);
+
+    _cursor = position.add(row: row + 1 + printingDesc.split('\n').length, col: description.length);
   }
 }
 

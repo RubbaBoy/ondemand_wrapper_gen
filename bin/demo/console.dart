@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math';
 
 import 'package:dart_console/dart_console.dart';
 import 'package:intl/intl.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 
+import 'console/breadcrumb.dart';
 import 'console/console_util.dart';
+import 'console/loading.dart';
 import 'console/selectable_list.dart';
 
 final money = NumberFormat('#,##0.00', 'en_US');
@@ -51,112 +54,22 @@ void main() {
       console: console,
       position: startContent.sub(row: 2),
       resetPosition: startContent,
-      trail: ['one', 'two', 'three', 'four']);
+      trail: ['one', 'two ', 'three', 'four']);
   breadcrumb.update();
 
   var list = SelectableList<String>(
     console: console,
     position: startContent,
-    items: ['one', 'two', 'three', 'four', 'five'],
+    width: (width / 2).floor(),
+    items: ['one', 'two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two', 'three', 'four', 'five'],
     min: 1,
     max: 3,
     multi: true,
   );
 
   list.display((selected) {
-    print('Selected: $selected');
+    console.writeLine('Selected: $selected');
   });
-}
-
-class Breadcrumb {
-  final Console console;
-
-  final Coordinate position;
-
-  /// Resets the position to this after updates
-  final Coordinate resetPosition;
-
-  final ConsoleColor textColor;
-
-  final ConsoleColor arrowColor;
-
-  final List<String> trail;
-
-  Breadcrumb(
-      {this.console,
-      this.position,
-      this.resetPosition,
-      this.textColor = ConsoleColor.brightGreen,
-      this.arrowColor = ConsoleColor.brightRed,
-      this.trail});
-
-  void update() {
-    console.cursorPosition = position;
-
-    trail.forEachI((i, item) {
-      if (i != 0) {
-        console.setForegroundColor(arrowColor);
-        console.write(' > ');
-      }
-      console.setForegroundColor(textColor);
-      console.write(item);
-    });
-
-    console.cursorPosition = resetPosition;
-  }
-}
-
-class Loading {
-  final Console console;
-
-  final Coordinate position;
-
-  final int width;
-
-  final ConsoleColor color1;
-
-  final ConsoleColor color2;
-
-  bool active = false;
-
-  Timer _timer;
-
-  int stage = 0;
-
-  Loading(this.console, this.position, this.width,
-      {this.color1 = ConsoleColor.brightRed,
-      this.color2 = ConsoleColor.brightGreen});
-
-  void start() {
-    if (active) {
-      return;
-    }
-
-    var adding = 1;
-    active = true;
-    _timer ??= Timer.periodic(Duration(milliseconds: 100), (timer) {
-      var left = '█' * stage;
-      var moving = '██';
-      var right = '█' * (width - stage);
-      console.cursorPosition = position;
-      console.setForegroundColor(color1);
-      console.write(left);
-      console.setForegroundColor(color2);
-      console.write(moving);
-      console.setForegroundColor(color1);
-      console.write(right);
-
-      stage += adding;
-      if (stage >= width || stage <= 0) {
-        adding *= -1;
-      }
-    });
-  }
-
-  Coordinate stop() {
-    _timer.cancel();
-    active = true;
-  }
 }
 
 class Cart {
@@ -217,6 +130,22 @@ class Item {
   final double price;
 
   Item(this.item, this.price);
+}
+
+String wrapString(String string, int prefixChars, int width) {
+  if (string.length + prefixChars <= width) {
+    return string;
+  }
+
+  var done = <String>[];
+  while (string.length + prefixChars > width) {
+    var end = min(string.length - prefixChars, width - prefixChars);
+    done.add(string.substring(0, end).trim());
+    string = string.substring(end);
+  }
+  done.add(string);
+
+  return '${done.first}\n${done.skip(1).map((line) => '${' ' * prefixChars}$line').join('\n')}';
 }
 
 String truncateString(String text, int length) =>

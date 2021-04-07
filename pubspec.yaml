@@ -12,6 +12,7 @@ dependencies:
   recase: ^3.0.1
   http: ^0.13.1
   dart_console: ^1.0.0
+  intl: ^0.17.0
 #  path: ^1.7.0
 
 dev_dependencies:

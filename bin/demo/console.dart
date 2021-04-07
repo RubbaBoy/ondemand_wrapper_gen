@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:dart_console/dart_console.dart';
@@ -11,6 +12,9 @@ final startContent = Coordinate(5, 0);
 
 void main() {
   final console = Console();
+  var height = console.windowHeight;
+  var width = console.windowWidth;
+
   console.clearScreen();
   console.setForegroundColor(ConsoleColor.brightRed);
   console.writeLine('RIT OnDemand Terminal', TextAlignment.center);
@@ -20,8 +24,9 @@ void main() {
 
   console.writeLine();
 
-  var height = console.windowHeight;
-  var width = console.windowWidth;
+  var loading = Loading(console, Coordinate(3, (width / 2).floor() - 10), 20);
+  loading.start();
+
   console.cursorPosition = Coordinate(height - 2, 1);
   console.write('(c) 2021 Adam Yarris');
 
@@ -36,17 +41,68 @@ void main() {
 
   console.cursorPosition = startContent;
 
-  var list = SelectableList<String>(
-    console: console,
-    items: ['one', 'two', 'three', 'four', 'five'],
-    min: 1,
-    max: 3,
-    multi: true,
-  );
+  // var list = SelectableList<String>(
+  //   console: console,
+  //   items: ['one', 'two', 'three', 'four', 'five'],
+  //   min: 1,
+  //   max: 3,
+  //   multi: true,
+  // );
+  //
+  // list.display((selected) {
+  //   print('Selected: $selected');
+  // });
+}
 
-  list.display((selected) {
-    print('Selected: $selected');
-  });
+class Loading {
+  final Console console;
+
+  final Coordinate position;
+
+  final int width;
+
+  final ConsoleColor color1;
+
+  final ConsoleColor color2;
+
+  bool active = false;
+
+  Timer _timer;
+
+  int stage = 0;
+
+  Loading(this.console, this.position, this.width, {this.color1 = ConsoleColor.brightRed, this.color2 = ConsoleColor.brightGreen});
+
+  void start() {
+    if (active) {
+      return;
+    }
+
+    var adding = 1;
+    active = true;
+    _timer ??= Timer.periodic(Duration(milliseconds: 100), (timer) {
+      var left = '█' * stage;
+      var moving = '██';
+      var right = '█' * (width - stage);
+      console.cursorPosition = position;
+      console.setForegroundColor(color1);
+      console.write(left);
+      console.setForegroundColor(color2);
+      console.write(moving);
+      console.setForegroundColor(color1);
+      console.write(right);
+
+      stage += adding;
+      if (stage >= width || stage <= 0) {
+        adding *= -1;
+      }
+    });
+  }
+
+  void stop() {
+    _timer.cancel();
+    active = true;
+  }
 }
 
 class Cart {

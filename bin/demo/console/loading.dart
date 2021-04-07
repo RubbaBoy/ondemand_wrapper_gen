@@ -30,7 +30,7 @@ class Loading {
 
     var adding = 1;
     active = true;
-    _timer ??= Timer.periodic(Duration(milliseconds: 100), (timer) {
+    _timer = Timer.periodic(Duration(milliseconds: 100), (timer) {
       var left = '█' * stage;
       var moving = '██';
       var right = '█' * (width - stage);
@@ -51,6 +51,8 @@ class Loading {
 
   void stop() {
     _timer.cancel();
-    active = true;
+    console.cursorPosition = position;
+    console.write(' ' * (width + 2));
+    active = false;
   }
 }

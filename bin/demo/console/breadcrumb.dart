@@ -35,6 +35,19 @@ class Breadcrumb {
       console.write(item);
     });
 
+    console.resetColorAttributes();
     console.cursorPosition = resetPosition;
+  }
+
+  void trailAdd(String item) {
+    trail.add(item);
+    update();
+  }
+
+  void trailPop([int count = 1]) {
+    for (;count > 0; count--) {
+      trail.removeLast();
+    }
+    update();
   }
 }

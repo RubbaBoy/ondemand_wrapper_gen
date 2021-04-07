@@ -1,138 +1,187 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:dart_console/dart_console.dart';
 import 'package:intl/intl.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
+import 'package:ondemand_wrapper_gen/gen/ondemand.g.dart';
 
 import 'console/breadcrumb.dart';
+import 'console/cart.dart';
 import 'console/console_util.dart';
 import 'console/loading.dart';
+import 'console/logic.dart';
 import 'console/selectable_list.dart';
+import 'enums.dart';
+
+import 'init.dart';
 
 final money = NumberFormat('#,##0.00', 'en_US');
-final startContent = Coordinate(5, 0);
 
 void main() {
-  final console = Console();
-  var height = console.windowHeight;
-  var width = console.windowWidth;
+  OnDemandConsole().show();
+}
 
-  console.clearScreen();
-  console.setForegroundColor(ConsoleColor.brightRed);
-  console.writeLine('RIT OnDemand Terminal', TextAlignment.center);
-  console.setForegroundColor(ConsoleColor.white);
-  console.writeLine('by Adam Yarris', TextAlignment.center);
-  console.resetColorAttributes();
+class OnDemandConsole {
 
-  console.writeLine();
+  Loading loading;
 
-  var loading = Loading(console, Coordinate(3, (width / 2).floor() - 10), 20);
-  // loading.start();
+  static const startContent = Coordinate(5, 0);
 
-  console.cursorPosition = Coordinate(height - 2, 1);
-  console.write('(c) 2021 Adam Yarris');
+  final OnDemandLogic logic = OnDemandLogic();
 
-  var size = '${width}x$height';
-  console.cursorPosition = Coordinate(height - 2, width - size.length);
-  console.write(size);
+  final Console console = Console();
 
-  console.cursorPosition = startContent;
+  int mainPanelWidth;
 
-  var cart = Cart(console, [
-    Item('Foo', 1.23),
-    Item('Bar', 23.12),
-    Item('Ham', 0.75),
-    Item('Cheese', 1.56)
-  ]);
-  cart.showCart();
+  Future<void> show() async {
+    var height = console.windowHeight;
+    var width = console.windowWidth;
 
-  console.cursorPosition = startContent;
+    console.clearScreen();
+    console.setForegroundColor(ConsoleColor.brightRed);
+    console.writeLine('RIT OnDemand Terminal', TextAlignment.center);
+    console.setForegroundColor(ConsoleColor.white);
+    console.writeLine('by Adam Yarris', TextAlignment.center);
+    console.resetColorAttributes();
 
-  var breadcrumb = Breadcrumb(
+    console.writeLine();
+
+    loading = Loading(console, Coordinate(3, (width / 2).floor() - 10), 20);
+
+    console.cursorPosition = Coordinate(height - 2, 1);
+    console.write('(c) 2021 Adam Yarris');
+
+    var size = '${width}x$height';
+    console.cursorPosition = Coordinate(height - 2, width - size.length);
+    console.write(size);
+
+    console.cursorPosition = startContent;
+
+    var cart = Cart(console, []);
+    cart.showCart();
+
+    console.cursorPosition = startContent;
+
+    var breadcrumb = Breadcrumb(
+        console: console,
+        position: startContent.sub(row: 2),
+        resetPosition: startContent,
+        trail: []);
+    breadcrumb.update();
+
+    mainPanelWidth = max(width - cart.width, (width * 0.75).floor()) - 5;
+
+    // var list = SelectableList<String>(
+    //   console: console,
+    //   position: startContent,
+    //   width: (width / 2).floor(),
+    //   items: ['one', 'two', 'three', 'four', 'five'],
+    //   min: 1,
+    //   max: 3,
+    //   multi: true,
+    // );
+    //
+    // list.display((selected) {
+    //   console.writeLine('Selected: $selected');
+    // });
+
+    await submitTask(init());
+
+    breadcrumb.trailAdd('Welcome');
+
+    var time = await showWelcome();
+    console.cursorPosition = startContent;
+
+    console.writeLine('Selected time: $time');
+
+    close(console);
+  }
+
+  Future<void> init() async {
+    await logic.init();
+  }
+
+  Future<OrderPlaceTime> showWelcome() {
+    final completer = Completer<OrderPlaceTime>();
+    console.cursorPosition = startContent;
+
+    var lines = writeLines(
+'''Welcome to the RIT OnDemand Terminal! The goal of this is to fully utilize the RIT OnDemand through the familiarity of your terminal.
+To select menu items, use arrow keys to navigate, space to select, and enter to finalize.''', mainPanelWidth);
+
+    var timePosition = startContent.add(row: lines + 1);
+
+    var list = SelectableList<OrderPlaceTime>(
       console: console,
-      position: startContent.sub(row: 2),
-      resetPosition: startContent,
-      trail: ['one', 'two ', 'three', 'four']);
-  breadcrumb.update();
+      upperDescription: 'Please select a time for your order:',
+      position: timePosition,
+      width: mainPanelWidth,
+      items: OrderPlaceTime.values,
+      multi: false,
+      autoSelect: true
+    );
 
-  var list = SelectableList<String>(
-    console: console,
-    position: startContent,
-    width: (width / 2).floor(),
-    items: ['one', 'two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two two', 'three', 'four', 'five'],
-    min: 1,
-    max: 3,
-    multi: true,
-  );
+    list.displayOne((time) async {
+      console.cursorPosition = timePosition;
 
-  list.display((selected) {
-    console.writeLine('Selected: $selected');
-  });
-}
+      if (time == OrderPlaceTime.FIND) {
+        time = await showTimes(timePosition);
+      }
 
-class Cart {
-  final Console console;
-  final List<Item> items;
+      clearView(console, timePosition, mainPanelWidth, lines + 1);
+      console.cursorPosition = timePosition;
 
-  /// The title of the cart. By default, "Shopping Cart".
-  final String title;
+      completer.complete(time);
+    });
 
-  /// The top-left x position. By default, 3/4 from the left of the screen.
-  int x;
-
-  /// The top-left y position. By default, [startContent].
-  int y;
-
-  /// The width. By default, 1/4 of the screen.
-  int width;
-
-  Cart._(this.console, this.items, this.title, this.x, this.y, this.width);
-
-  factory Cart(Console console, List<Item> items,
-      {String title = 'Shopping Cart', int x, int y, int width}) {
-    var windowWidth = console.windowWidth;
-    width ??= min(30, (windowWidth * 0.25).floor());
-    x ??= windowWidth - width;
-    y ??= startContent.row;
-    return Cart._(console, items, title, x, y, width);
+    return completer.future;
   }
 
-  void showCart() {
-    var startCartPos = Coordinate(y, x);
-    console.cursorPosition = startCartPos;
-    var title = 'Shopping Cart';
-    var spacing = ((width - title.length) / 2).floor();
-    console.cursorPosition = startCartPos.add(col: spacing);
-    console.write(title);
+  Future<OrderPlaceTime> showTimes(Coordinate position) async {
+    final completer = Completer<OrderTime>();
+    var times = await submitTask(logic.getOrderTimes());
 
-    console.cursorPosition = startCartPos = startCartPos.add(row: 1);
+    var list = SelectableList<OrderTime>(
+        console: console,
+        position: position,
+        upperDescription: 'Please select a time for your order:',
+        width: mainPanelWidth,
+        items: times,
+        multi: false,
+        autoSelect: true
+    );
 
-    for (var item in items) {
-      console.write(item.item);
-      var cost = '\$${money.format(item.price)}';
-      console.cursorPosition = startCartPos.add(col: width - cost.length);
-      console.write(cost);
-      console.cursorPosition = startCartPos = startCartPos.add(row: 1);
+    list.displayOne(completer.complete);
+
+    return completer.future.then((time) => OrderPlaceTime.fromTime(time));
+  }
+
+  Future<T> submitTask<T>(Future<T> future) {
+    loading.start();
+    return future.then((value) {
+      loading.stop();
+      console.resetColorAttributes();
+      console.cursorPosition = startContent;
+      return value;
+    });
+  }
+
+  /// Writes lines wrapped to the given width, returning the newlines used.
+  int writeLines(String text, int width) {
+    var lines = 0;
+    for (var line in text.split('\n')) {
+      var wrapped = wrapString(line, width);
+      lines += wrapped.split('\n').length;
+      console.writeLine(wrapped);
     }
-
-    console.write('Total');
-    var cost =
-        '\$${money.format(items.map((item) => item.price).reduce((a, b) => a + b))}';
-    console.cursorPosition = startCartPos.add(col: width - cost.length);
-    console.write(cost);
+    return lines;
   }
 }
 
-class Item {
-  final String item;
-  final double price;
-
-  Item(this.item, this.price);
-}
-
-String wrapString(String string, int prefixChars, int width) {
+String wrapString(String string, int width, [int prefixChars = 0]) {
   if (string.length + prefixChars <= width) {
     return string;
   }
@@ -140,12 +189,12 @@ String wrapString(String string, int prefixChars, int width) {
   var done = <String>[];
   while (string.length + prefixChars > width) {
     var end = min(string.length - prefixChars, width - prefixChars);
-    done.add(string.substring(0, end).trim());
+    done.add(string.substring(0, end));
     string = string.substring(end);
   }
   done.add(string);
 
-  return '${done.first}\n${done.skip(1).map((line) => '${' ' * prefixChars}$line').join('\n')}';
+  return '${done.first.trim()}\n${done.skip(1).map((line) => '${' ' * prefixChars}${line.trim()}').join('\n')}';
 }
 
 String truncateString(String text, int length) =>
@@ -155,4 +204,24 @@ void cursorDown(Console console, int amount) {
   for (var i = 0; i < amount; i++) {
     console.cursorDown();
   }
+}
+
+/// Clears the view and resets the cursor to [position]. [height] is inclusive.
+void clearView(Console console, Coordinate bottom, int width, int height) {
+  var bottomLeft = bottom.copy(col: 0);
+  console.cursorPosition = bottomLeft;
+  for (var i = 0; i <= height; i++) {
+    console.write(' ' * width);
+    console.cursorPosition = bottomLeft = bottomLeft.sub(row: 1);
+  }
+}
+
+void close(Console console, [String message]) {
+  if (message != null) {
+    console.clearScreen();
+    console.write(message);
+  }
+  console.resetCursorPosition();
+  console.rawMode = false;
+  exit(1);
 }

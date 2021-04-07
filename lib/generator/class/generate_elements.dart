@@ -77,12 +77,13 @@ class ElementInfo {
 
     if (type == ElementType.Object) {
       var path = '$jsonPath.$jsonName';
+      String typeName;
       if (classGenerator.createNewClass(jsonName)) {
-        var typeName = classGenerator.createClassName(path, jsonName);
+        typeName = classGenerator.createClassName(path, jsonName);
         classGenerator.classVisitor(typeName, aggregate(listElement), path);
       }
 
-      var typeName = classGenerator.createClassName(path, jsonName,
+      typeName ??= classGenerator.createClassName(path, jsonName,
           respectOverflow: false);
       return ElementInfo(type,
           generator: classGenerator,

@@ -20,12 +20,18 @@ class SelectableList<T> {
   /// The maximum amount of items that may be selected
   final int max;
 
+  /// If the first item should be automatically selected
+  final bool autoSelect;
+
   /// The items being displayed. [toString()] is invoked on [T] to display
   /// in the console.
   final List<Option<T>> items;
 
+  /// The prompt that is shown at the top
+  final String upperDescription;
+
   /// The prompt that is shown at the bottom
-  final String description;
+  final String lowerDescription;
 
   /// The [Console] object.
   final Console console;
@@ -36,8 +42,17 @@ class SelectableList<T> {
   /// The active cursor position, used for resetting.
   Coordinate _cursor;
 
-  SelectableList({@required this.console, this.position, this.width, @required List<T> items, this.description = 'Select the options (use arrow keys to navigate, space to select. enter to finalize)', this.multi = true, this.min = 0, this.max = 1})
-      : items = items.map((item) => Option(item)).toList();
+  SelectableList({@required this.console, this.position, this.width, @required List<T> items, this.lowerDescription, this.upperDescription, this.multi = true, this.min = 0, this.max = 1, this.autoSelect = false})
+      : items = items.map((item) => Option(item)).toList() {
+    if (autoSelect) {
+      this.items.first.selected = true;
+    }
+  }
+
+  /// Same as [#display(void Function(List<T>))] but only takes the first
+  /// element from the callback (or null).
+  void displayOne(void Function(T) callback) =>
+      display((list) => callback(list.isEmpty ? null : list.first));
 
   /// Displays the list, and when everything is selected, [callback] is invoked
   /// once.
@@ -71,7 +86,7 @@ class SelectableList<T> {
           break;
         }
       } else if (key.controlChar == ControlCharacter.ctrlC) {
-        return;
+        close(console, 'Terminal closed by user');
       }
 
       if (index > items.length - 1) {
@@ -83,18 +98,8 @@ class SelectableList<T> {
       _redisplay();
     }
 
-    clearView();
+    clearView(console, _cursor, width, _cursor.row - position.row + 1);
     callback(getSelected().map((option) => option.value).toList());
-  }
-
-  /// Clears the view and resets the cursor to [position]
-  void clearView() {
-    var bottomLeft = _cursor.copy(col: 0);
-    console.cursorPosition = bottomLeft;
-    for (var i = 0; i < _cursor.row - position.row; i++) {
-      console.write(' ' * width);
-      console.cursorPosition = bottomLeft = bottomLeft.sub(row: 1);
-    }
   }
 
   int amountSelected() => getSelected().length;
@@ -104,6 +109,8 @@ class SelectableList<T> {
 
   void _redisplay() {
     console.cursorPosition = position;
+
+    var upperLines = printText(upperDescription, false);
 
     var row = 0;
     for (var i = 0; i < items.length; i++) {
@@ -116,18 +123,36 @@ class SelectableList<T> {
       console.write('] ');
       console.resetColorAttributes();
 
-      var wrapped = wrapString('$value', 4, width);
+      var wrapped = wrapString('$value', width, 4);
       console.write(wrapped);
       console.writeLine();
 
       row += wrapped.split('\n').length;
     }
 
-    var printingDesc = wrapString(description, 0, width);
-    console.writeLine();
-    console.writeLine(printingDesc);
+    var lowerLines = printText(lowerDescription, true);
 
-    _cursor = position.add(row: row + 1 + printingDesc.split('\n').length, col: description.length);
+    _cursor = position.add(row: row + upperLines + lowerLines, col: lowerDescription?.length ?? 0);
+  }
+
+  /// Prints test, returning a list of the used newlines;
+  int printText(String test, bool newlineBefore) {
+    var descriptionLines = 0;
+    if (test != null) {
+      var printingDesc = wrapString(test, width);
+      if (newlineBefore) {
+        console.writeLine();
+      }
+
+      console.writeLine(printingDesc);
+
+      if (!newlineBefore) {
+        console.writeLine();
+      }
+
+      descriptionLines = printingDesc.split('\n').length;
+    }
+    return descriptionLines;
   }
 }
 
@@ -138,5 +163,12 @@ class Option<T> {
   Option(this.value, [this.selected = false]);
 
   @override
-  String toString() => '$value';
+  String toString() {
+    // If it's an enum, return the enum name
+    var split = value.toString().split('.');
+    if (split.length > 1 && split[0] == value.runtimeType.toString()) {
+      return split[1];
+    }
+    return '$value';
+  }
 }

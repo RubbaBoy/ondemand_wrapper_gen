@@ -15,7 +15,7 @@ class Creator {
         commentGenerator: defaultCommentGenerator());
 
     var requests = [
-      Request('get_config', 'https://ondemand.rit.edu/api/config'),
+      Request('get_config', 'https://ondemand.rit.edu/api/config', combine: false),
 
       // siteNumber   get_config => response#tenantId (1312)
       // contextId   get_config => response#contextId (dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd)
@@ -347,12 +347,14 @@ class Request {
 
   final List<String> forceToString;
 
+  final bool combine;
+
   Request(this.name, this.url,
-      {this.placeholders = const [], this.nameMap, this.forceCounting, this.forceToString = const []});
+      {this.placeholders = const [], this.nameMap, this.forceCounting, this.forceToString = const [], this.combine = true});
 
   /// Gets the settings with the base (or default) of [base].
   GeneratorSettings getSettings(GeneratorSettings base) => base.copyWith(
-      staticNameTransformer: nameMap, forceObjectCounting: forceCounting, forceToString: forceToString);
+      staticNameTransformer: nameMap, forceObjectCounting: forceCounting, forceToString: forceToString, shareClasses: combine);
 }
 
 /// The [placeholderUrls] is a list of placeholder URLs.

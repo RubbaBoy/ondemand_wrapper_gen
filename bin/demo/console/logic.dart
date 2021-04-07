@@ -32,25 +32,26 @@ as _get_wait_time;
 import '../init.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 
+import 'time_handler.dart';
+
 class OnDemandLogic {
   OnDemand onDemand;
   _get_config.Response config;
-  _get_kitchens.Response getKitchens;
+  _get_kitchens.Response _kitchens;
 
   Future<void> init() async {
     var initialization = Initialization();
     onDemand = await initialization.createOnDemand();
     config = initialization.config;
-
-
   }
+
+  Future<_get_kitchens.Response> _getKitchens() async =>
+      _kitchens ??= await onDemand.getKitchens(_get_kitchens.Request());
 
   Future<List<OrderTime>> getOrderTimes() async {
     Time minTime;
     Time maxTime;
-    // TODO: This doesn't seem right to get the times
-    getKitchens ??= await onDemand.getKitchens(_get_kitchens.Request());
-    for (var kitchen in getKitchens.kitchens) {
+    for (var kitchen in (await _getKitchens()).kitchens) {
       var opens = Time.fromString(kitchen.availableAt.opens);
       var closes = Time.fromString(kitchen.availableAt.closes);
 
@@ -67,119 +68,9 @@ class OnDemandLogic {
     }
 
     var scheduledOrdering = config.properties.scheduledOrdering;
-    return _getOrderTimes(minTime, maxTime, scheduledOrdering.intervalTime, scheduledOrdering.bufferTime);
+    return calculateOrderTimes(minTime, maxTime, scheduledOrdering.intervalTime, scheduledOrdering.bufferTime);
   }
 
-  List<OrderTime> _getOrderTimes(Time startTime, Time endTime, int intervalTime, int bufferTime) {
-    var times = <OrderTime>[];
-    while (isAfter(startTime, endTime)) {
-      var newStartTime = startTime.add(minute: intervalTime);
-      times.add(OrderTime(startTime, newStartTime));
-      startTime = newStartTime;
-    }
-
-    var now = Time.fromDateTime(DateTime.now().add(Duration(minutes: bufferTime)));
-    while (times.isNotEmpty && isAfter(times.first.start, now)) {
-      times.removeAt(0);
-    }
-
-    return times;
-  }
-}
-
-/// Checks if the time b is after a.
-/// Time examples: `7:30 pm`, `12:45 am`
-bool isAfter(Time a, Time b) {
-  if (a == b) {
-    return false;
-  }
-
-  var aHour = a.hour;
-  var bHour = b.hour;
-  if (a.amPm == 'pm') {
-    aHour = a.hour + 12;
-  }
-
-  if (b.amPm == 'pm') {
-    bHour = b.hour + 12;
-  }
-
-  if (bHour > aHour) {
-    return true;
-  } else if (bHour < aHour) {
-    return false;
-  }
-
-  return b.minute > a.minute;
-}
-
-/// And order time (time should be in increments of 15 minutes)
-class OrderTime {
-  final Time start;
-  final Time end;
-
-  const OrderTime(this.start, this.end);
-
-  @override
-  String toString() => '$start - $end';
-}
-
-class Time {
-  final int hour;
-  final int minute;
-  final String amPm;
-
-  Time(this.hour, this.minute, this.amPm);
-
-  factory Time.fromString(String time) {
-    var split = time.split(RegExp(r'[\s:]'));
-    return Time(split[0].parseInt(), split[1].parseInt(), split[2]);
-  }
-
-  Time.fromDateTime(DateTime dateTime)
-    : hour = (dateTime.hour % 12),
-      minute = dateTime.minute,
-      amPm = dateTime.hour > 12 ? 'pm' : 'am';
-
-  Time copy({int hour, int minute, String amPm}) =>
-      Time(hour ?? this.hour, minute ?? this.minute, amPm ?? this.amPm);
-
-  Time add({int hour = 0, int minute = 0}) {
-    var newHour = this.hour + hour;
-    var newMinute = this.minute + minute;
-    var newAmPm = amPm;
-
-    newHour += (newMinute / 60).floor();
-    newMinute %= 60;
-
-    var excessHour = (newHour / 12).floor();
-    newHour %= 12;
-
-    if (excessHour % 2 != 0) {
-      newAmPm = amPm == 'am' ? 'pm' : 'am';
-    }
-
-    return Time(newHour, newMinute, newAmPm);
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Time &&
-          runtimeType == other.runtimeType &&
-          hour == other.hour &&
-          minute == other.minute &&
-          amPm == other.amPm;
-
-  @override
-  int get hashCode => hour.hashCode ^ minute.hashCode ^ amPm.hashCode;
-
-  @override
-  String toString() {
-    var printHour = hour;
-    if (hour == 0) {
-      printHour = 12;
-    }
-    return '$printHour:${minute.toString().padLeft(2, '0')} $amPm';
-  }
+  Future<List<_get_kitchens.Kitchen>> getKitchens() async =>
+      (await _getKitchens()).kitchens;
 }

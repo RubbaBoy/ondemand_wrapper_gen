@@ -14,6 +14,8 @@ import 'console/console_util.dart';
 import 'console/loading.dart';
 import 'console/logic.dart';
 import 'console/selectable_list.dart';
+import 'console/tiled_selection.dart';
+import 'console/time_handler.dart';
 import 'enums.dart';
 
 import 'init.dart';
@@ -22,6 +24,8 @@ final money = NumberFormat('#,##0.00', 'en_US');
 
 void main() {
   OnDemandConsole().show();
+  // var lineString = "This is a really long string that I plan on splitting, huh this is kinda weird lmfao lololol 123456789098765432123456789012345678909876543212345678901234567890987654321234567890 then we have some more shit that shouldn't be truncated I think lol who knows";
+  // print(wrapString(lineString, 50));
 }
 
 class OnDemandConsole {
@@ -74,6 +78,8 @@ class OnDemandConsole {
 
     mainPanelWidth = max(width - cart.width, (width * 0.75).floor()) - 5;
 
+    // if (true) return;
+
     // var list = SelectableList<String>(
     //   console: console,
     //   position: startContent,
@@ -95,7 +101,9 @@ class OnDemandConsole {
     var time = await showWelcome();
     console.cursorPosition = startContent;
 
-    console.writeLine('Selected time: $time');
+    // Selected time: $time
+
+    await listPlaces();
 
     close(console);
   }
@@ -159,6 +167,19 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
     return completer.future.then((time) => OrderPlaceTime.fromTime(time));
   }
 
+  Future<void> listPlaces() async {
+    var kitchens = await logic.getKitchens();
+    var tile = TiledSelection(console: console, position: startContent,
+      items: kitchens.map((e) => e.name).toList(),
+      tileWidth: (mainPanelWidth / 6).floor(),
+      tileHeight: 5,
+      containerWidth: mainPanelWidth,
+    );
+
+    tile.show((t) {
+    });
+  }
+
   Future<T> submitTask<T>(Future<T> future) {
     loading.start();
     return future.then((value) {
@@ -181,20 +202,42 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
   }
 }
 
-String wrapString(String string, int width, [int prefixChars = 0]) {
+List<String> wrapStringList(String string, int width, [int prefixChars = 0]) {
   if (string.length + prefixChars <= width) {
-    return string;
+    return [string];
   }
 
-  var done = <String>[];
-  while (string.length + prefixChars > width) {
-    var end = min(string.length - prefixChars, width - prefixChars);
-    done.add(string.substring(0, end));
-    string = string.substring(end);
+  var splitWords = string.split(RegExp('\\s+'));
+  var doneLines = <String>[];
+  var currLine = '';
+  while (splitWords.isNotEmpty) {
+    var topWord = splitWords.removeAt(0);
+    if (topWord.length + prefixChars > width) {
+      doneLines.add(currLine);
+      doneLines.add(topWord);
+      currLine = '';
+    } else if (currLine.length + topWord.length + prefixChars < width) {
+      currLine += ' $topWord';
+    } else {
+      doneLines.add(currLine);
+      currLine = topWord;
+    }
   }
-  done.add(string);
 
-  return '${done.first.trim()}\n${done.skip(1).map((line) => '${' ' * prefixChars}${line.trim()}').join('\n')}';
+  if (currLine.isNotEmpty) {
+    doneLines.add(currLine);
+  }
+
+  return doneLines;
+}
+
+String wrapString(String string, int width, [int prefixChars = 0]) {
+  var doneLines = wrapStringList(string, width, prefixChars);
+  var str = doneLines.first.trim();
+  if (doneLines.length > 1) {
+    str += '\n${doneLines.skip(1).map((line) => '${' ' * prefixChars}${line.trim()}').join('\n')}';
+  }
+  return str;
 }
 
 String truncateString(String text, int length) =>

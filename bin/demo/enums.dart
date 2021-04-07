@@ -1,4 +1,5 @@
 import 'console/logic.dart';
+import 'console/time_handler.dart';
 
 class OrderPlaceTime {
   static const ASAP = OrderPlaceTime('As soon as possible');

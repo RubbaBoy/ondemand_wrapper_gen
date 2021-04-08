@@ -142,6 +142,8 @@ class OnDemandConsole {
 
     // Selected time: $time
 
+    breadcrumb.trailAdd('$time');
+
     await listPlaces(time);
 
     close(console);
@@ -212,7 +214,7 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
   }
 
   Future<void> listPlaces(OrderPlaceTime time) async {
-    var kitchens = await logic.getKitchens();
+    var kitchens = await submitTask(logic.getKitchens());
     var tile = TiledSelection<KitchenSelector>(console: console, position: startContent,
       items: kitchens.map((e) => KitchenSelector(e, time)).toList(),
       optionManager: const KitchenOptionManager(),

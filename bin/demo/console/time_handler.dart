@@ -1,9 +1,5 @@
 import 'package:ondemand_wrapper_gen/extensions.dart';
 
-void main(List<String> args) {
-  print(calculateOrderTimes(Time.fromString('1:09 am'), Time.fromString('9:15 pm'), 15, 0));
-}
-
 List<OrderTime> calculateOrderTimes(Time startTime, Time endTime, int intervalTime, int bufferTime) {
   var times = <OrderTime>[];
   while (isAfter(startTime, endTime)) {
@@ -47,13 +43,14 @@ bool isAfter(Time a, Time b, [bool inclusive = false]) {
   return b.minute > a.minute;
 }
 
+/// Checks if the given [time] is between the timespan of [orderTime],
+/// inclusively.
 bool isBetweenOrderTime(Time time, OrderTime orderTime) =>
     isBetween(time, orderTime.start, orderTime.end);
 
-bool isBetween(Time time, Time a, Time b) {
-  print('[$time => ($a - $b)]');
-  return isAfter(time, a, true) && isAfter(b, time, true);
-}
+/// Checks if the given [time] is between the times of [a] and [b], inclusively.
+bool isBetween(Time time, Time a, Time b) =>
+    isAfter(a, time, true) && isAfter(time, b, true);
 
 /// And order time (time should be in increments of 15 minutes)
 class OrderTime {

@@ -1,31 +1,46 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:dart_console/dart_console.dart';
 import 'package:intl/intl.dart';
-import 'package:ondemand_wrapper_gen/extensions.dart';
-import 'package:ondemand_wrapper_gen/gen/ondemand.g.dart';
 
 import 'console/breadcrumb.dart';
 import 'console/cart.dart';
+import 'console/component/display_strategies.dart';
+import 'console/component/selectable_list.dart';
+import 'console/component/tiled_selection.dart';
 import 'console/console_util.dart';
 import 'console/loading.dart';
 import 'console/logic.dart';
-import 'console/selectable_list.dart';
-import 'console/tiled_selection.dart';
 import 'console/time_handler.dart';
 import 'enums.dart';
-
-import 'init.dart';
 
 final money = NumberFormat('#,##0.00', 'en_US');
 
 void main() {
   OnDemandConsole().show();
   // var lineString = "This is a really long string that I plan on splitting, huh this is kinda weird lmfao lololol 123456789098765432123456789012345678909876543212345678901234567890987654321234567890 then we have some more shit that shouldn't be truncated I think lol who knows";
-  // print(wrapString(lineString, 50));
+  // var str = 'Global Village Cantina\n\n11:00 am - 8:15 pm';
+  // var splitWords = str.split(' ').map((e) => specialSplit(e, '\n')).reduce((a, b) => [...a, ...b]).toList();
+  // print(splitWords);
+  // print(wrapStringList('Global Village Cantina\n\n11:00 am - 8:15 pm', 22));
+}
+
+List<String> specialSplit(String string, String splitting) {
+  var out = <String>[];
+  int index;
+  var start = 0;
+  while ((index = string.indexOf(splitting, start)) != -1) {
+    if (start != index) {
+      out.add(string.substring(start, index));
+    }
+
+    out.add(string.substring(index, index + splitting.length));
+    start = index + splitting.length;
+  }
+  out.add(string.substring(start));
+  return out;
 }
 
 class OnDemandConsole {
@@ -152,6 +167,10 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
     final completer = Completer<OrderTime>();
     var times = await submitTask(logic.getOrderTimes());
 
+    // print('times = $times');
+
+    // close(console);
+
     var list = SelectableList<OrderTime>(
         console: console,
         position: position,
@@ -170,10 +189,12 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
   Future<void> listPlaces() async {
     var kitchens = await logic.getKitchens();
     var tile = TiledSelection(console: console, position: startContent,
-      items: kitchens.map((e) => e.name).toList(),
-      tileWidth: (mainPanelWidth / 6).floor(),
-      tileHeight: 5,
+      items: kitchens,
+      stringStrategy: const KitchenDisplay(),
+      tileWidth: (mainPanelWidth / 4).floor(),
+      tileHeight: 6,
       containerWidth: mainPanelWidth,
+      borderColor: ConsoleColor.brightBlack,
     );
 
     tile.show((t) {
@@ -207,20 +228,35 @@ List<String> wrapStringList(String string, int width, [int prefixChars = 0]) {
     return [string];
   }
 
-  var splitWords = string.split(RegExp('\\s+'));
+  // No newline splitting is intentional
+  var splitWords = string
+      .split(' ')
+      .map((e) => specialSplit(e, '\n'))
+      .reduce((a, b) => [...a, ...b])
+      .toList();
   var doneLines = <String>[];
   var currLine = '';
   while (splitWords.isNotEmpty) {
-    var topWord = splitWords.removeAt(0);
-    if (topWord.length + prefixChars > width) {
-      doneLines.add(currLine);
-      doneLines.add(topWord);
+    var word = splitWords.removeAt(0).trim();
+
+    if (word.isEmpty) {
+      if (currLine.isNotEmpty) {
+        doneLines.add(currLine);
+      }
+      doneLines.add('');
       currLine = '';
-    } else if (currLine.length + topWord.length + prefixChars < width) {
-      currLine += ' $topWord';
+      continue;
+    }
+
+    if (word.length + prefixChars > width) {
+      doneLines.add(currLine);
+      doneLines.add(word);
+      currLine = '';
+    } else if (currLine.length + word.length + prefixChars < width) {
+      currLine += ' $word';
     } else {
       doneLines.add(currLine);
-      currLine = topWord;
+      currLine = word;
     }
   }
 

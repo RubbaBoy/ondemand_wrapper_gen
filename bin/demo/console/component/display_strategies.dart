@@ -1,3 +1,7 @@
+import 'package:dart_console/dart_console.dart';
+
+import '../ansi.dart';
+import 'base.dart';
 import 'package:ondemand_wrapper_gen/gen/ondemand.g.dart';
 import 'package:ondemand_wrapper_gen/gen/get_config.g.dart' as _get_config;
 import 'package:ondemand_wrapper_gen/gen/get_items.g.dart' as _get_items;
@@ -29,50 +33,33 @@ import 'package:ondemand_wrapper_gen/gen/send_sms.g.dart' as _send_sms;
 import 'package:ondemand_wrapper_gen/gen/get_wait_time.g.dart'
 as _get_wait_time;
 
-import '../init.dart';
-import 'package:ondemand_wrapper_gen/extensions.dart';
+class DefaultDisplay<T> with OptionStringStrategy<T> {
+  const DefaultDisplay();
 
-import 'time_handler.dart';
+  @override
+  String displayString(Option<T> option) => option.display();
+}
 
-class OnDemandLogic {
-  OnDemand onDemand;
-  _get_config.Response config;
-  _get_kitchens.Response _kitchens;
+/// Displays kitchens in the format of:
+/// ```
+/// name
+/// open - close
+/// ```
+/// For example:
+/// ```
+/// The Commons
+/// 7:00 am - 10:00 pm
+/// ```
+class KitchenDisplay with OptionStringStrategy<_get_kitchens.Kitchen> {
+  const KitchenDisplay();
 
-  Future<void> init() async {
-    var initialization = Initialization();
-    onDemand = await initialization.createOnDemand();
-    config = initialization.config;
+  @override
+  String displayString(Option<_get_kitchens.Kitchen> option) {
+    var value = option.value;
+    var res = '${value.name}\n\n';
+    res += ansiSetColor(ansiForegroundColors[ConsoleColor.brightBlack]);
+    res += '${value.availableAt.opens} - ${value.availableAt.closes}';
+    res += ansiResetColor;
+    return res;
   }
-
-  Future<_get_kitchens.Response> _getKitchens() async =>
-      _kitchens ??= await onDemand.getKitchens(_get_kitchens.Request());
-
-  Future<List<OrderTime>> getOrderTimes() async {
-    Time minTime;
-    Time maxTime;
-    for (var kitchen in (await _getKitchens()).kitchens) {
-      var opens = Time.fromString(kitchen.availableAt.opens);
-      var closes = Time.fromString(kitchen.availableAt.closes);
-
-      minTime ??= opens;
-      maxTime ??= closes;
-
-      if (isAfter(opens, minTime)) {
-        minTime = opens;
-      }
-
-      if (isAfter(maxTime, closes)) {
-        maxTime = closes;
-      }
-    }
-
-    // print('minTime = $minTime');
-    // print('maxTimne = $maxTime');
-    var scheduledOrdering = config.properties.scheduledOrdering;
-    return calculateOrderTimes(minTime, maxTime, scheduledOrdering.intervalTime, scheduledOrdering.bufferTime);
-  }
-
-  Future<List<_get_kitchens.Kitchen>> getKitchens() async =>
-      (await _getKitchens()).kitchens;
 }

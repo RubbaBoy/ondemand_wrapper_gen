@@ -1,8 +1,10 @@
 import 'package:dart_console/dart_console.dart';
 import 'package:meta/meta.dart';
-import 'console_util.dart';
+import '../console_util.dart';
 
-import '../console.dart';
+import '../../console.dart';
+import 'base.dart';
+import 'display_strategies.dart';
 
 class SelectableList<T> {
 
@@ -36,13 +38,15 @@ class SelectableList<T> {
   /// The [Console] object.
   final Console console;
 
+  final OptionStringStrategy<T> stringStrategy;
+
   /// The list index the cursor is at
   int index = 0;
 
   /// The active cursor position, used for resetting.
   Coordinate _cursor;
 
-  SelectableList({@required this.console, this.position, this.width, @required List<T> items, this.lowerDescription, this.upperDescription, this.multi = true, this.min = 0, this.max = 1, this.autoSelect = false})
+  SelectableList({@required this.console, this.position, this.width, @required List<T> items, this.lowerDescription, this.upperDescription, this.multi = true, this.min = 0, this.max = 1, this.autoSelect = false, this.stringStrategy = const DefaultDisplay()})
       : items = items.map((item) => Option(item)).toList() {
     if (autoSelect) {
       this.items.first.selected = true;
@@ -123,7 +127,7 @@ class SelectableList<T> {
       console.write('] ');
       console.resetColorAttributes();
 
-      var wrapped = wrapString('$value', width, 4);
+      var wrapped = wrapString(value.display(), width, 4);
       console.write(wrapped);
       console.writeLine();
 
@@ -153,22 +157,5 @@ class SelectableList<T> {
       descriptionLines = printingDesc.split('\n').length;
     }
     return descriptionLines;
-  }
-}
-
-class Option<T> {
-  final T value;
-  bool selected;
-
-  Option(this.value, [this.selected = false]);
-
-  @override
-  String toString() {
-    // If it's an enum, return the enum name
-    var split = value.toString().split('.');
-    if (split.length > 1 && split[0] == value.runtimeType.toString()) {
-      return split[1];
-    }
-    return '$value';
   }
 }

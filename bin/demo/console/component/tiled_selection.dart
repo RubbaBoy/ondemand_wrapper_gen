@@ -2,7 +2,9 @@ import 'dart:math';
 
 import 'package:dart_console/dart_console.dart';
 
-import '../console.dart';
+import '../../console.dart';
+import 'base.dart';
+import 'display_strategies.dart';
 import 'selectable_list.dart';
 
 // final TL_CORNER = String.fromCharCode(201);
@@ -40,11 +42,13 @@ class TiledSelection<T> {
 
   final ConsoleColor textColor;
 
+  final OptionStringStrategy<T> stringStrategy;
+
   /// [tileWidth] and [tileHeight] are the outer sizes.
   /// If [autoSize] is true, [width] and [height] are unused.
   /// If [tileHeight] is too small for anything (including a space above and
   /// below text), ALL [tileHeight]s are adjusted.
-  TiledSelection({this.console, this.position, List<T> items, this.containerWidth, this.containerHeight, this.tileWidth, this.tileHeight, this.borderColor, this.textColor})
+  TiledSelection({this.console, this.position, List<T> items, this.stringStrategy = const DefaultDisplay(), this.containerWidth, this.containerHeight, this.tileWidth, this.tileHeight, this.borderColor, this.textColor})
     : items = items.map((item) => Option(item)).toList();
 
   void show(void Function(T) callback) {
@@ -71,11 +75,12 @@ class TiledSelection<T> {
     var tileHeight = this.tileHeight - 2;
     console.cursorPosition = Coordinate(y++, x);
 
+    console.setForegroundColor(borderColor);
     console.write(TL_CORNER);
     console.write(HORI_EDGE * tileWidth);
     console.write(TR_CORNER);
 
-    var lines = wrapStringList('$option', tileWidth);
+    var lines = wrapStringList(stringStrategy.displayString(option), tileWidth);
 
     int topSpace;
     int bottomSpace;
@@ -105,9 +110,15 @@ class TiledSelection<T> {
       var rightSpace = possibleSpaces - leftSpace;
 
       console.cursorPosition = Coordinate(y++, x);
+
+      console.setForegroundColor(borderColor);
       console.write(VERT_EDGE);
       console.write(' ' * leftSpace);
+
+      console.resetColorAttributes();
       console.write(line);
+
+      console.setForegroundColor(borderColor);
       console.write(' ' * rightSpace);
       console.write(VERT_EDGE);
     }
@@ -118,6 +129,7 @@ class TiledSelection<T> {
     console.write(BL_CORNER);
     console.write(HORI_EDGE * tileWidth);
     console.write(BR_CORNER);
+    console.resetColorAttributes();
 
     return [tileWidth, topSpace + bottomSpace + lines.length + 2];
   }

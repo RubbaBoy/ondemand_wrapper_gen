@@ -100,19 +100,21 @@ class OnDemandConsole {
 
     // BruhDisplay
 
-    // var tile = TiledSelection(console: console, position: startContent,
-    //   items: [Bruh()],
-    //   stringStrategy: const BruhDisplay(),
-    //   tileWidth: (mainPanelWidth / 4).floor(),
-    //   tileHeight: 6,
-    //   containerWidth: mainPanelWidth,
-    //   borderColor: ConsoleColor.brightBlack,
-    // );
-    //
-    // tile.show((t) {
-    // });
-    //
-    // if (true) return;
+    var tile = TiledSelection(console: console, position: startContent,
+      items: [Bruh(), Bruh(), Bruh(), Bruh(), Bruh()],
+      stringStrategy: const BruhDisplay(),
+      tileWidth: (mainPanelWidth / 4).floor(),
+      tileHeight: 6,
+      containerWidth: mainPanelWidth,
+      borderColor: ConsoleColor.brightBlack,
+      selectedColor: ConsoleColor.brightGreen,
+    );
+
+    tile.show((t) {
+      console.writeLine('Selected: $t');
+    });
+
+    if (true) return;
 
     // var list = SelectableList<String>(
     //   console: console,

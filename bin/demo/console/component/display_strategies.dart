@@ -59,3 +59,20 @@ class KitchenDisplay with OptionStringStrategy<_get_kitchens.Kitchen> {
     FormattedString('${option.value.availableAt.opens} -\n${option.value.availableAt.closes}', ansiSetColor(ansiForegroundColors[ConsoleColor.brightBlack])),
   ];
 }
+
+class BruhDisplay with OptionStringStrategy<Bruh> {
+  const BruhDisplay();
+
+  @override
+  List<FormattedString> displayFormattedString(Option<Bruh> option) {
+    var strs = <FormattedString>[
+      FormattedString('The Commons'),
+      FormattedString('11:00 am -\n9:00 pm', ansiSetColor(ansiForegroundColors[ConsoleColor.brightBlack])),
+    ];
+    return strs;
+  }
+}
+
+class Bruh {
+
+}

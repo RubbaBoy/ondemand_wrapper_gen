@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import 'console/breadcrumb.dart';
 import 'console/cart.dart';
 import 'console/component/base.dart';
-import 'console/component/display_strategies.dart';
+import 'console/component/option_managers.dart';
 import 'console/component/selectable_list.dart';
 import 'console/component/tiled_selection.dart';
 import 'console/console_util.dart';
@@ -16,6 +16,8 @@ import 'console/loading.dart';
 import 'console/logic.dart';
 import 'console/time_handler.dart';
 import 'enums.dart';
+import 'package:ondemand_wrapper_gen/gen/get_kitchens.g.dart' as _get_kitchens;
+
 
 final money = NumberFormat('#,##0.00', 'en_US');
 
@@ -100,21 +102,21 @@ class OnDemandConsole {
 
     // BruhDisplay
 
-    var tile = TiledSelection(console: console, position: startContent,
-      items: [Bruh(), Bruh(), Bruh(), Bruh(), Bruh()],
-      stringStrategy: const BruhDisplay(),
-      tileWidth: (mainPanelWidth / 4).floor(),
-      tileHeight: 6,
-      containerWidth: mainPanelWidth,
-      borderColor: ConsoleColor.brightBlack,
-      selectedColor: ConsoleColor.brightGreen,
-    );
-
-    tile.show((t) {
-      console.writeLine('Selected: $t');
-    });
-
-    if (true) return;
+    // var tile = TiledSelection(console: console, position: startContent,
+    //   items: [Bruh(), Bruh(), Bruh(), Bruh(), Bruh()],
+    //   stringStrategy: const BruhDisplay(),
+    //   tileWidth: (mainPanelWidth / 4).floor(),
+    //   tileHeight: 6,
+    //   containerWidth: mainPanelWidth,
+    //   borderColor: ConsoleColor.brightBlack,
+    //   selectedColor: ConsoleColor.brightGreen,
+    // );
+    //
+    // tile.show((t) {
+    //   console.writeLine('Selected: $t');
+    // });
+    //
+    // if (true) return;
 
     // var list = SelectableList<String>(
     //   console: console,
@@ -140,7 +142,7 @@ class OnDemandConsole {
 
     // Selected time: $time
 
-    await listPlaces();
+    await listPlaces(time);
 
     close(console);
   }
@@ -209,18 +211,20 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
     return completer.future.then((time) => OrderPlaceTime.fromTime(time));
   }
 
-  Future<void> listPlaces() async {
+  Future<void> listPlaces(OrderPlaceTime time) async {
     var kitchens = await logic.getKitchens();
-    var tile = TiledSelection(console: console, position: startContent,
-      items: kitchens,
-      stringStrategy: const KitchenDisplay(),
+    var tile = TiledSelection<KitchenSelector>(console: console, position: startContent,
+      items: kitchens.map((e) => KitchenSelector(e, time)).toList(),
+      optionManager: const KitchenOptionManager(),
       tileWidth: (mainPanelWidth / 4).floor(),
       tileHeight: 6,
       containerWidth: mainPanelWidth,
       borderColor: ConsoleColor.brightBlack,
+      selectedColor: ConsoleColor.brightGreen,
     );
 
     tile.show((t) {
+      print('Selected kitchen: ${t.kitchen.name}');
     });
   }
 

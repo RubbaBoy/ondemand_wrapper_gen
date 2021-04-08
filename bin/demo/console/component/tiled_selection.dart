@@ -6,16 +6,8 @@ import '../console_util.dart';
 
 import '../../console.dart';
 import 'base.dart';
-import 'display_strategies.dart';
+import 'option_managers.dart';
 import 'selectable_list.dart';
-
-// final TL_CORNER = String.fromCharCode(201);
-// final TR_CORNER = String.fromCharCode(187);
-// final BR_CORNER = String.fromCharCode(188);
-// final BL_CORNER = String.fromCharCode(200);
-//
-// final HORI_EDGE = String.fromCharCode(205);
-// final VERT_EDGE = String.fromCharCode(186);
 
 final TL_CORNER = '+';
 final TR_CORNER = '+';
@@ -42,7 +34,7 @@ class TiledSelection<T> {
 
   final ConsoleColor selectedColor;
 
-  final OptionStringStrategy<T> stringStrategy;
+  final OptionManager<T> optionManager;
 
   int index = 0;
 
@@ -56,13 +48,16 @@ class TiledSelection<T> {
   /// The active cursor position, used for resetting.
   Coordinate _cursor;
 
+  TiledSelection._(this.console, this.position, this.items, this.optionManager, this.containerWidth, this.tileWidth, this.tileHeight, this.borderColor, this.selectedColor);
+
   /// [tileWidth] and [tileHeight] are the outer sizes.
   /// If [autoSize] is true, [width] and [height] are unused.
   /// If [tileHeight] is too small for anything (including a space above and
   /// below text), ALL [tileHeight]s are adjusted.
-  TiledSelection({this.console, this.position, List<T> items, this.stringStrategy = const DefaultDisplay(), this.containerWidth, this.tileWidth, this.tileHeight, this.borderColor, this.selectedColor})
-    : items = items.map((item) => Option(item)).toList() {
-    this.items.first.selected = true;
+  factory TiledSelection({Console console, Coordinate position, List<T> items, OptionManager<T> optionManager, int containerWidth, int tileWidth, int tileHeight, ConsoleColor borderColor, ConsoleColor selectedColor}) {
+    var _items = items.map(optionManager.createOption).toList();
+    _items.first.selected = true;
+    return TiledSelection._(console, position, _items, optionManager, containerWidth, tileWidth, tileHeight, borderColor, selectedColor);
   }
 
   void show(void Function(T) callback) {
@@ -74,9 +69,9 @@ class TiledSelection<T> {
     var y = (index / tileXCount).floor();
     while ((key = console.readKey()) != null) {
       if (key.controlChar == ControlCharacter.arrowUp) {
-        y++;
-      } else if (key.controlChar == ControlCharacter.arrowDown) {
         y--;
+      } else if (key.controlChar == ControlCharacter.arrowDown) {
+        y++;
       } else if (key.controlChar == ControlCharacter.arrowRight) {
         x++;
       } else if (key.controlChar == ControlCharacter.arrowLeft) {
@@ -165,7 +160,6 @@ class TiledSelection<T> {
     tileYCount = _tileYCount;
     lastTileXCount = _lastTileXCount;
 
-    print('Pos: (${position.col}, ${position.row}) Height: ${row + biggestHeight}');
     _cursor = position.copy(row: row + biggestHeight);
   }
 
@@ -183,7 +177,7 @@ class TiledSelection<T> {
     console.write(HORI_EDGE * tileWidth);
     console.write(TR_CORNER);
 
-    var formattedLines = wrapFormattedStringList(stringStrategy.displayFormattedString(option), tileWidth);
+    var formattedLines = wrapFormattedStringList(optionManager.displayFormattedString(option), tileWidth);
 
     int topSpace;
     int bottomSpace;

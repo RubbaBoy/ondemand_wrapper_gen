@@ -5,7 +5,7 @@ import 'dart:math' as math;
 
 import '../../console.dart';
 import 'base.dart';
-import 'display_strategies.dart';
+import 'option_managers.dart';
 
 class SelectableList<T> {
 
@@ -43,7 +43,7 @@ class SelectableList<T> {
   /// The [Console] object.
   final Console console;
 
-  final OptionStringStrategy<T> stringStrategy;
+  final OptionManager<T> optionManager;
 
   /// The list index the cursor is at
   int index = 0;
@@ -52,7 +52,7 @@ class SelectableList<T> {
   Coordinate _cursor;
 
   /// If scrolling is used
-  bool scrolling;
+  final bool scrolling;
 
   /// The top index
   int scrollFrom = 0;
@@ -60,15 +60,21 @@ class SelectableList<T> {
   /// The bottom index
   int scrollTo = 0;
 
-  SelectableList({@required this.console, this.position, this.width, int scrollAfter, @required List<T> items, this.lowerDescription, this.upperDescription, this.multi = true, this.min = 0, this.max = 1, this.autoSelect = false, this.stringStrategy = const DefaultDisplay()})
-      : items = items.map((item) => Option(item)).toList(),
-        scrollAfter = scrollAfter ?? double.maxFinite.toInt() {
+  SelectableList._(this.console, this.position, this.optionManager, this.width, this.scrollAfter, this.items, this.lowerDescription, this.upperDescription, this.multi, this.min, this.max, this.autoSelect, this.scrolling, this.scrollTo);
+
+  factory SelectableList({@required Console console, Coordinate position, OptionManager<T> optionManager, int width, int scrollAfter, @required List<T> items, String lowerDescription, String upperDescription, bool multi = true, int min = 0, int max = 1, bool autoSelect = false}) {
+    optionManager ??= DefaultOptionManager<T>();
+    var _items = items.map(optionManager.createOption).toList();
+    scrollAfter ??= double.maxFinite.toInt();
+
     if (autoSelect) {
-      this.items.first.selected = true;
+      _items.first.selected = true;
     }
 
-    scrolling = items.length > this.scrollAfter;
-    scrollTo = math.min(items.length, this.scrollAfter);
+    var _scrolling = items.length > scrollAfter;
+    var _scrollTo = math.min(items.length, scrollAfter);
+
+    return SelectableList._(console, position, optionManager, width, scrollAfter, _items, lowerDescription, upperDescription, multi, min, max, autoSelect, _scrolling, _scrollTo);
   }
 
   /// Same as [#display(void Function(List<T>))] but only takes the first

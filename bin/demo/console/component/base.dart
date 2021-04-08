@@ -1,8 +1,9 @@
 class Option<T> {
   final T value;
   bool selected;
+  bool selectable;
 
-  Option(this.value, {this.selected = false});
+  Option(this.value, {this.selectable = true, this.selected = false});
 
   String display() {
     // If it's an enum, return the enum name
@@ -20,13 +21,19 @@ class Option<T> {
 }
 
 /// A strategy to change the default [Option#display] method.
-abstract class OptionStringStrategy<T> {
+abstract class OptionManager<T> {
+
   /// Creates a display string to display the object
   String displayString(Option<T> option) => null;
 
   /// Invoked internally, is the actual method to use.
   List<FormattedString> displayFormattedString(Option<T> option) =>
       [FormattedString(displayString(option))];
+
+  /// Gets if the [T] should create a selectable option.
+  bool isSelectable(T t);
+
+  Option<T> createOption(T t) => Option<T>(t, selectable: isSelectable(t));
 }
 
 class FormattedString {

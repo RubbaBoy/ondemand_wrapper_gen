@@ -22,9 +22,10 @@ List<OrderTime> calculateOrderTimes(Time startTime, Time endTime, int intervalTi
 
 /// Checks if the time b is after a.
 /// Time examples: `7:30 pm`, `12:45 am`
-bool isAfter(Time a, Time b) {
+/// If [inclusive] is [true] and the times are equal, [true] is returned.
+bool isAfter(Time a, Time b, [bool inclusive = false]) {
   if (a == b) {
-    return false;
+    return inclusive;
   }
 
   var aHour = a.hour;
@@ -46,12 +47,34 @@ bool isAfter(Time a, Time b) {
   return b.minute > a.minute;
 }
 
+bool isBetweenOrderTime(Time time, OrderTime orderTime) =>
+    isBetween(time, orderTime.start, orderTime.end);
+
+bool isBetween(Time time, Time a, Time b) {
+  print('[$time => ($a - $b)]');
+  return isAfter(time, a, true) && isAfter(b, time, true);
+}
+
 /// And order time (time should be in increments of 15 minutes)
 class OrderTime {
   final Time start;
   final Time end;
 
   const OrderTime(this.start, this.end);
+
+  factory OrderTime.fromAvailableAt(dynamic availableAt) =>
+      OrderTime(Time.fromString(availableAt.opens), Time.fromString(availableAt.closes));
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OrderTime &&
+          runtimeType == other.runtimeType &&
+          start == other.start &&
+          end == other.end;
+
+  @override
+  int get hashCode => start.hashCode ^ end.hashCode;
 
   @override
   String toString() => '$start - $end';
@@ -68,6 +91,8 @@ class Time {
     var split = time.split(RegExp(r'[\s:]'));
     return Time(split[0].parseInt(), split[1].parseInt(), split[2]);
   }
+
+  factory Time.now() => Time.fromDateTime(DateTime.now());
 
   Time.fromDateTime(DateTime dateTime)
       : hour = (dateTime.hour % 12),

@@ -80,15 +80,15 @@ class TiledSelection<T> {
     console.write(HORI_EDGE * tileWidth);
     console.write(TR_CORNER);
 
-    var lines = wrapStringList(stringStrategy.displayString(option), tileWidth);
+    var formattedLines = wrapFormattedStringList(stringStrategy.displayFormattedString(option), tileWidth);
 
     int topSpace;
     int bottomSpace;
-    if (lines.length > tileHeight) {
+    if (formattedLines.length > tileHeight) {
       topSpace = 1;
       bottomSpace = 1;
     } else {
-      var available = tileHeight - lines.length;
+      var available = tileHeight - formattedLines.length;
       topSpace = ((available) / 2).floor();
       bottomSpace = available - topSpace;
     }
@@ -104,10 +104,11 @@ class TiledSelection<T> {
 
     handleSpace(topSpace);
 
-    for (var line in lines) {
-      var possibleSpaces = tileWidth - line.length;
-      var leftSpace = (possibleSpaces / 2).floor();
-      var rightSpace = possibleSpaces - leftSpace;
+    for (var formattedLine in formattedLines) {
+      var line = formattedLine.value;
+      var possibleSpaces = tileWidth - line.length; // 12
+      var leftSpace = (possibleSpaces / 2).floor(); // 6
+      var rightSpace = possibleSpaces - leftSpace; // 6
 
       console.cursorPosition = Coordinate(y++, x);
 
@@ -116,6 +117,10 @@ class TiledSelection<T> {
       console.write(' ' * leftSpace);
 
       console.resetColorAttributes();
+      if (formattedLine.asciiFormatting != null) {
+        console.write(formattedLine.asciiFormatting);
+      }
+
       console.write(line);
 
       console.setForegroundColor(borderColor);
@@ -131,6 +136,6 @@ class TiledSelection<T> {
     console.write(BR_CORNER);
     console.resetColorAttributes();
 
-    return [tileWidth, topSpace + bottomSpace + lines.length + 2];
+    return [tileWidth, topSpace + bottomSpace + formattedLines.length + 2];
   }
 }

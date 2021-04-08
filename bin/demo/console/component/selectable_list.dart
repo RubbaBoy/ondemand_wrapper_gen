@@ -1,6 +1,7 @@
 import 'package:dart_console/dart_console.dart';
 import 'package:meta/meta.dart';
 import '../console_util.dart';
+import 'dart:math' as math;
 
 import '../../console.dart';
 import 'base.dart';
@@ -11,6 +12,10 @@ class SelectableList<T> {
   final Coordinate position;
 
   final int width;
+
+  /// Will enable scrolling after the given amount of lines (or until the end
+  /// of the screen is reached)
+  final int scrollAfter;
 
   /// If [true], this will act as a checkbox. If [false], it will act as a
   /// radio.
@@ -46,11 +51,24 @@ class SelectableList<T> {
   /// The active cursor position, used for resetting.
   Coordinate _cursor;
 
-  SelectableList({@required this.console, this.position, this.width, @required List<T> items, this.lowerDescription, this.upperDescription, this.multi = true, this.min = 0, this.max = 1, this.autoSelect = false, this.stringStrategy = const DefaultDisplay()})
-      : items = items.map((item) => Option(item)).toList() {
+  /// If scrolling is used
+  bool scrolling;
+
+  /// The top index
+  int scrollFrom = 0;
+
+  /// The bottom index
+  int scrollTo = 0;
+
+  SelectableList({@required this.console, this.position, this.width, int scrollAfter, @required List<T> items, this.lowerDescription, this.upperDescription, this.multi = true, this.min = 0, this.max = 1, this.autoSelect = false, this.stringStrategy = const DefaultDisplay()})
+      : items = items.map((item) => Option(item)).toList(),
+        scrollAfter = scrollAfter ?? double.maxFinite.toInt() {
     if (autoSelect) {
       this.items.first.selected = true;
     }
+
+    scrolling = items.length > this.scrollAfter;
+    scrollTo = math.min(items.length, this.scrollAfter);
   }
 
   /// Same as [#display(void Function(List<T>))] but only takes the first
@@ -63,12 +81,52 @@ class SelectableList<T> {
   void display(void Function(List<T> selected) callback) {
     _redisplay();
 
+    /// 0 is no wrapping occurred
+    /// 1 if a wrap to 0 occurred
+    /// -1 is a wrapped to `length - 1` occurred
+    int processIndex() {
+      if (index > items.length - 1) {
+        index = 0;
+        return 1;
+      } else if (index < 0) {
+        index = items.length - 1;
+        return -1;
+      }
+      return 0;
+    }
+
+    /// Returns if a wrap occurred
+    bool processWrapIndex() {
+      var wrap = processIndex();
+
+      var diff = scrollTo - scrollFrom;
+      if (wrap == 1) {
+        scrollFrom = 0;
+        scrollTo = diff;
+        return true;
+      } else if (wrap == -1) {
+        scrollTo = items.length;
+        scrollFrom = scrollTo - diff;
+        return true;
+      }
+
+      return false;
+    }
+
     Key key;
     while ((key = console.readKey()) != null) {
       if (key.controlChar == ControlCharacter.arrowUp) {
         index--;
+        if (!processWrapIndex() && scrolling && index + 1== scrollFrom) {
+          scrollFrom--;
+          scrollTo--;
+        }
       } else if (key.controlChar == ControlCharacter.arrowDown) {
         index++;
+        if (!processWrapIndex() && scrolling && index == scrollTo) {
+          scrollFrom++;
+          scrollTo++;
+        }
       } else if (key.char == ' ') {
         if (multi) {
           if (items[index].selected) {
@@ -93,12 +151,6 @@ class SelectableList<T> {
         close(console, 'Terminal closed by user');
       }
 
-      if (index > items.length - 1) {
-        index = 0;
-      } else if (index < 0) {
-        index = items.length - 1;
-      }
-
       _redisplay();
     }
 
@@ -117,7 +169,7 @@ class SelectableList<T> {
     var upperLines = printText(upperDescription, false);
 
     var row = 0;
-    for (var i = 0; i < items.length; i++) {
+    for (var i = scrollFrom; i < scrollTo; i++) {
       var value = items[i];
       console.setForegroundColor(ConsoleColor.brightBlack);
       console.write('[');

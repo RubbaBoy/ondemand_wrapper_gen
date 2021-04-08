@@ -22,5 +22,21 @@ class Option<T> {
 /// A strategy to change the default [Option#display] method.
 abstract class OptionStringStrategy<T> {
   /// Creates a display string to display the object
-  String displayString(Option<T> option);
+  String displayString(Option<T> option) => null;
+
+  /// Invoked internally, is the actual method to use.
+  List<FormattedString> displayFormattedString(Option<T> option) =>
+      [FormattedString(displayString(option))];
+}
+
+class FormattedString {
+  final String asciiFormatting;
+  final String value;
+
+  FormattedString(this.value, [this.asciiFormatting]);
+
+  @override
+  String toString() {
+    return 'FormattedString{asciiFormatting: $asciiFormatting, value: $value}';
+  }
 }

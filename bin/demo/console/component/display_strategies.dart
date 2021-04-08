@@ -54,12 +54,8 @@ class KitchenDisplay with OptionStringStrategy<_get_kitchens.Kitchen> {
   const KitchenDisplay();
 
   @override
-  String displayString(Option<_get_kitchens.Kitchen> option) {
-    var value = option.value;
-    var res = '${value.name}\n\n';
-    res += ansiSetColor(ansiForegroundColors[ConsoleColor.brightBlack]);
-    res += '${value.availableAt.opens} - ${value.availableAt.closes}';
-    res += ansiResetColor;
-    return res;
-  }
+  List<FormattedString> displayFormattedString(Option<_get_kitchens.Kitchen> option) => [
+    FormattedString(option.value.name),
+    FormattedString('${option.value.availableAt.opens} -\n${option.value.availableAt.closes}', ansiSetColor(ansiForegroundColors[ConsoleColor.brightBlack])),
+  ];
 }

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import 'console/breadcrumb.dart';
 import 'console/cart.dart';
+import 'console/component/base.dart';
 import 'console/component/display_strategies.dart';
 import 'console/component/selectable_list.dart';
 import 'console/component/tiled_selection.dart';
@@ -21,10 +22,14 @@ final money = NumberFormat('#,##0.00', 'en_US');
 void main() {
   OnDemandConsole().show();
   // var lineString = "This is a really long string that I plan on splitting, huh this is kinda weird lmfao lololol 123456789098765432123456789012345678909876543212345678901234567890987654321234567890 then we have some more shit that shouldn't be truncated I think lol who knows";
-  // var str = 'Global Village Cantina\n\n11:00 am - 8:15 pm';
-  // var splitWords = str.split(' ').map((e) => specialSplit(e, '\n')).reduce((a, b) => [...a, ...b]).toList();
+  // var str = 'Global Village Cantina\n\n11:00 am -\n8:15 pm';
+
+  // var splitWords = str.split(' ').map((e) => e.split('\n')).reduce((a, b) => [...a, ...b]).toList();
   // print(splitWords);
-  // print(wrapStringList('Global Village Cantina\n\n11:00 am - 8:15 pm', 22));
+
+  // var splitWords2 = str.split(' ').map((e) => specialSplit(e, '\n')).reduce((a, b) => [...a, ...b]).toList();
+  // print(splitWords2);
+  // print(wrapStringList('11:00 am -\n8:15 pm', 22));
 }
 
 List<String> specialSplit(String string, String splitting) {
@@ -93,16 +98,31 @@ class OnDemandConsole {
 
     mainPanelWidth = max(width - cart.width, (width * 0.75).floor()) - 5;
 
+    // BruhDisplay
+
+    // var tile = TiledSelection(console: console, position: startContent,
+    //   items: [Bruh()],
+    //   stringStrategy: const BruhDisplay(),
+    //   tileWidth: (mainPanelWidth / 4).floor(),
+    //   tileHeight: 6,
+    //   containerWidth: mainPanelWidth,
+    //   borderColor: ConsoleColor.brightBlack,
+    // );
+    //
+    // tile.show((t) {
+    // });
+    //
     // if (true) return;
 
     // var list = SelectableList<String>(
     //   console: console,
     //   position: startContent,
     //   width: (width / 2).floor(),
-    //   items: ['one', 'two', 'three', 'four', 'five'],
+    //   items: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'],
     //   min: 1,
     //   max: 3,
     //   multi: true,
+    //   scrollAfter: 3,
     // );
     //
     // list.display((selected) {
@@ -178,7 +198,8 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
         width: mainPanelWidth,
         items: times,
         multi: false,
-        autoSelect: true
+        autoSelect: true,
+        scrollAfter: 15
     );
 
     list.displayOne(completer.complete);
@@ -223,11 +244,16 @@ To select menu items, use arrow keys to navigate, space to select, and enter to 
   }
 }
 
-List<String> wrapStringList(String string, int width, [int prefixChars = 0]) {
-  if (string.length + prefixChars <= width) {
-    return [string];
+List<FormattedString> wrapFormattedStringList(List<FormattedString> strings, int width, [int prefixChars = 0]) {
+  var formatted = <FormattedString>[];
+  for (var formatString in strings) {
+    formatted.addAll(wrapStringList(formatString.value, width, prefixChars)
+        .map((str) => FormattedString(str, formatString.asciiFormatting)));
   }
+  return formatted;
+}
 
+List<String> wrapStringList(String string, int width, [int prefixChars = 0]) {
   // No newline splitting is intentional
   var splitWords = string
       .split(' ')
@@ -237,13 +263,10 @@ List<String> wrapStringList(String string, int width, [int prefixChars = 0]) {
   var doneLines = <String>[];
   var currLine = '';
   while (splitWords.isNotEmpty) {
-    var word = splitWords.removeAt(0).trim();
+    var word = splitWords.removeAt(0);
 
-    if (word.isEmpty) {
-      if (currLine.isNotEmpty) {
-        doneLines.add(currLine);
-      }
-      doneLines.add('');
+    if (word == '\n') {
+      doneLines.add(currLine);
       currLine = '';
       continue;
     }
@@ -264,7 +287,7 @@ List<String> wrapStringList(String string, int width, [int prefixChars = 0]) {
     doneLines.add(currLine);
   }
 
-  return doneLines;
+  return doneLines.map((e) => e.trim()).toList();
 }
 
 String wrapString(String string, int width, [int prefixChars = 0]) {

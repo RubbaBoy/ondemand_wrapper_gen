@@ -31,27 +31,18 @@ extension ListUtility<E> on Iterable<E> {
 }
 
 extension PathUtils on List<dynamic> {
-  String separatorFix([bool replaceSlashes = false]) {
-    return map((e) => (e is File || e is Directory ? e.path : e) as String)
-        .where((str) => str.isNotEmpty)
-        .join(separator);
-  }
+  String separatorFix() =>
+      map((e) => (e is File || e is Directory ? e.path : e) as String)
+          .where((str) => str.isNotEmpty)
+          .join(separator);
 
   /// Creates a [File] from the current path.
   /// Replaces all slashes with the division symbol.
-  File get file => File(separatorFix(true));
-
-  /// Creates a [File] from the current path.
-  /// DOES NOT replace slashes with the division symbol.
-  File get fileRaw => File(separatorFix());
+  File get file => File(separatorFix());
 
   /// Creates a [Directory] from the current path.
   /// Replaces all slashes with the division symbol.
-  Directory get directory => Directory(separatorFix(true));
-
-  /// Creates a [Directory] from the current path.
-  /// DOES NOT replace slashes with the division symbol.
-  Directory get directoryRaw => Directory(separatorFix());
+  Directory get directory => Directory(separatorFix());
 }
 
 extension StringUtils on String {

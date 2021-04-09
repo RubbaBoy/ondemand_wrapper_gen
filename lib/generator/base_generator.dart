@@ -1,8 +1,15 @@
+import 'dart:io';
+
 /// The request/response base class, returning a static class
 class BaseGenerator {
-  String generate() => r'''
+
+  Future<void> generate(File file) => file.writeAsString(generateString());
+
+  String generateString() => r'''
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/io_client.dart';
+import 'package:http/http.dart' as http;
 
 export 'dart:io';
 
@@ -22,47 +29,28 @@ abstract class BaseResponse {
   dynamic toJson();
 }
 
-final httpClient = HttpClient()..badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
+final httpClient = HttpClient()
+  ..badCertificateCallback =
+      ((X509Certificate cert, String host, int port) => true);
+final ioClient = IOClient(httpClient);
 
-Future<HttpClientResponse> get(String url, BaseRequest baseRequest, Map<String, String> headers) async =>
-    await _startRequest('GET', url, headers);
+Future<http.Response> get(
+        String url, BaseRequest baseRequest, Map<String, String> headers) =>
+    ioClient.get(Uri.parse(url), headers: headers);
 
-Future<HttpClientResponse> put(String url, BaseRequest baseRequest, Map<String, String> headers) async =>
-    await _startRequest('PUT', url, headers);
+Future<http.Response> put(
+        String url, BaseRequest baseRequest, Map<String, String> headers) =>
+    ioClient.put(Uri.parse(url), headers: headers);
 
-Future<HttpClientResponse> post(String url, BaseRequest baseRequest, Map<String, String> headers) async =>
-    await _startRequest('POST', url, headers, baseRequest.toJson());
+Future<http.Response> post(
+        String url, BaseRequest baseRequest, Map<String, String> headers) =>
+    ioClient.post(Uri.parse(url),
+        headers: {...headers, 'Content-Type': 'application/json'},
+        body: jsonEncode(baseRequest.toJson()));
 
-Future<HttpClientResponse> _startRequest(
-    String method, String url, Map<String, String> headers,
-    [dynamic body]) async {
-  var request = await httpClient.openUrl(method, Uri.parse(url));
-  headers?.forEach(request.headers.set);
-
-  if (body != null) {
-    request.add(utf8.encode(jsonEncode(body)));
-  }
-
-  return request.close();
-}
-
-extension BodyUtil on HttpClientResponse {
+extension BodyUtil on http.Response {
   /// Transforms the body into a decoded dynamic JSON object.
-  Future<dynamic> json() async => jsonDecode(await text());
-  
-  /// Gets the body as text.
-  Future<String> text() async => await transform(utf8.decoder).join();
+  dynamic json() => jsonDecode(body);
 }
-
-extension HeaderUtil on HttpHeaders {
-  /// Transforms the current [HttpHeaders] object into a map of the name and
-  /// first header with the name.
-  Map<String, String> toMap() {
-    var map = <String, String>{};
-    forEach((name, values) => map[name] = values.first);
-    return map;
-  }
-}
-
-  ''';
+''';
 }

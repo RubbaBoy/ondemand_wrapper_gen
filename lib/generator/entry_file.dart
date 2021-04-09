@@ -1,4 +1,6 @@
 
+import 'dart:io';
+
 import 'package:dart_style/dart_style.dart';
 import 'package:ondemand_wrapper_gen/creating.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
@@ -14,10 +16,13 @@ class GenerateEntryFile {
       {this.finalizeFields = true, String Function(String code) formatOutput})
       : formatOutput = formatOutput ?? _formatter.format;
 
+  Future<void> generate(String name, List<CreatedFile> createdFiles, List<String> constantFields, File file) =>
+      file.writeAsString(generateString(name, createdFiles, constantFields));
+
   /// Generates an entry file, containing request methods for every request.
   /// All [constantFields] will be declared in the constructor, e.g. the overall
   /// site ID.
-  String generate(String name, List<CreatedFile> createdFiles,
+  String generateString(String name, List<CreatedFile> createdFiles,
       List<String> constantFields) {
     var res = StringBuffer();
 
@@ -26,6 +31,7 @@ class GenerateEntryFile {
     res.writeln('\nclass $name {');
 
     res.writeln('Map<String, String> baseHeaders = {};');
+    res.writeln('_get_config.Response config;');
     createConstructor(name, constantFields, res);
     res.writeln();
 
@@ -36,11 +42,11 @@ class GenerateEntryFile {
   }
 
   void generateImports(List<CreatedFile> createdFiles, StringBuffer buffer) {
-    buffer.writeln("import 'base.g.dart';");
+    buffer.writeln("import 'base.dart';");
 
     for (var file in createdFiles) {
       var name = file.request.name;
-      buffer.writeln("import 'package:ondemand_wrapper_gen/gen/$name.g.dart' as _$name;");
+      buffer.writeln("import '$name.dart' as _$name;");
     }
   }
 
@@ -95,7 +101,7 @@ class GenerateEntryFile {
 
     var bodyParam = '';
     if (!createdFile.unbodiedResponse) {
-      bodyParam = 'await res.json(), ';
+      bodyParam = 'res.json(), ';
     }
 
     buffer.writeln(
@@ -104,10 +110,10 @@ class GenerateEntryFile {
     
     var res = await ${createdFile.method.toLowerCase()}('${replaceParams(request.url, request.placeholders)}', request, {...request.headers, ...baseHeaders});
     if (res.statusCode != 200) {
-      return Future.error('Status \${res.statusCode}: \${await res.text()}');
+      return Future.error('Status \${res.statusCode}: \${res.body}');
     }
     
-    return $name.Response.fromJson(${bodyParam}res.headers.toMap());
+    return $name.Response.fromJson(${bodyParam}res.headers);
     }
         ''');
   }

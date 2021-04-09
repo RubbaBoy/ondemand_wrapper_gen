@@ -1,19 +1,21 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:ondemand_wrapper_gen/creating.dart';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generator/base_generator.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
 import 'package:ondemand_wrapper_gen/generator/entry_file.dart';
+import 'package:ondemand_wrapper_gen/generator/generate_main.dart';
 import 'package:ondemand_wrapper_gen/har_api.dart';
 
 typedef CreateGenerator = ClassGenerator Function(
     Map<String, dynamic> json, String method);
 
-void main(List<String> arguments) {
-  var input = jsonDecode(
-      File('E:\\ondemand_fiddler\\ondemand-1.har').readAsStringSync());
+/// Arguments:
+/// - The .har file path
+/// - The lib directory to pipe data
+Future<void> main(List<String> args) async {
+  var input = jsonDecode(args[0].file.readAsStringSync());
   var log = Log.fromJson(input['log']);
   print('Comment = ${log.comment}');
 
@@ -31,16 +33,15 @@ void main(List<String> arguments) {
     }
   });
 
-  var generateDirectory = [r'E:\ondemand_wrapper_gen\lib\gen'].directory;
-  generateDirectory.createSync();
+  var generateDirectory = args[1].directory;
+  await generateDirectory.create();
 
   var creator = Creator();
   var created = creator.createWrapper(generateDirectory, bruh, true);
 
-  var entryCreator = GenerateEntryFile();
-  var createdEntry = entryCreator.generate('OnDemand', created, ['siteNumber']);
-  [generateDirectory, 'ondemand.g.dart'].file.writeAsStringSync(createdEntry);
+  await GenerateEntryFile().generate('OnDemand', created, ['siteNumber'], [generateDirectory, 'ondemand_requests.dart'].file);
 
-  var baseGenerator = BaseGenerator();
-  [generateDirectory, 'base.g.dart'].file.writeAsStringSync(baseGenerator.generate());
+  await BaseGenerator().generate([generateDirectory, 'base.dart'].file);
+
+  await GenerateMain().generate(created, [generateDirectory, 'ondemand.dart'].file);
 }

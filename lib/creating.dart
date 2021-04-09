@@ -97,7 +97,10 @@ class Creator {
       Request('get_menus',
           r'https://ondemand.rit.edu/api/sites/$/$/concepts/$/menus/$',
           placeholders: ['siteNumber', 'contextId', 'displayId', 'placeId'],
-          nameMap: multiResponse('Place', 'places')),
+          nameMap: {
+            'request.menus': 'Menu',
+            ...multiResponse('Menu', 'menus'),
+          }),
 
       // itemId   get_menus => request.[].menus.[].categories#item (5f121d554f05a8000c1b87df)   The food item ID (static/const)
       // Gets an item from a menu by its itemId (gives more info such as childGroups)
@@ -215,7 +218,7 @@ class Creator {
       var placeholderData = getPlaceholdered(request.url, entries.keys.toList(), usedUrls);
       var urls = placeholderData.map((e) => e.url).toList();
 
-      var outFile = [generateDirectory, '${request.name}.g.dart'].file;
+      var outFile = [generateDirectory, '${request.name}.dart'].file;
 
       var generatedFile = generate(entries, request.name, urls, generator);
       if (write) {

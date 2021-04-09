@@ -4,7 +4,7 @@ import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
 import 'generate_elements.dart';
 
 void importGenerator(StringBuffer buffer) {
-  buffer.writeln("import 'base.g.dart';");
+  buffer.writeln("import 'base.dart';");
   buffer.writeln();
 }
 

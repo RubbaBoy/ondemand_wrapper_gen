@@ -26,7 +26,7 @@ final _formatter = DartFormatter();
 /// Generates a Dart class string based on browsing a class tree.
 class ClassGenerator {
   final String Function(String) formatOutput;
-  String className;
+  final String className;
   final String url;
   final String method;
   final bool ignoreBase;
@@ -85,7 +85,7 @@ class ClassGenerator {
   final List<String> forceToString;
 
   /// Name, Content
-  final classes = <String, String>{};
+  final classes = <String, CreatedClass>{};
 
   /// The amount of clashes for a class name
   final clashes = <String, int>{};
@@ -160,11 +160,9 @@ class ClassGenerator {
           forceObjectCounting: settings.forceObjectCounting,
           forceToString: settings.forceToString);
 
-  String generated(Map<String, dynamic> json) {
+  /// Generates a wrapper for the given JSON (without imports)
+  Map<String, CreatedClass> generated(Map<String, dynamic> json) {
     json = Map.unmodifiable(json);
-    var string = StringBuffer();
-
-    importGenerator(string);
 
     if (childrenRequireAggregation) {
       var aggregated = json.map<String, MapEntry<dynamic, bool>>((key, value) {
@@ -210,16 +208,7 @@ class ClassGenerator {
     print(
         'Created classes (${classes.length}): ${classes.keys.join(', ')}\n\n');
 
-    classes.values.forEach(string.writeln);
-
-    var out = string.toString();
-    try {
-      out = formatOutput(string.toString());
-    } catch (e) {
-      print(e);
-    }
-
-    return out;
+    return classes;
   }
 
   /// Creates classes and adds them into [classes] with the given [name] and
@@ -339,7 +328,7 @@ class ClassGenerator {
     res.writeln('}');
 
     if (!base || !(base && ignoreBase)) {
-      classes[name.toLowerCase()] = res.toString();
+      classes[name.toLowerCase()] = CreatedClass(formatOutput(res.toString()), context, { for (var field in fields) field.dartName : field.type.generateTypeString(field) });
     } else {
       print('Not registering class: $name');
     }
@@ -557,4 +546,27 @@ class ClassContext {
   final String jsonPath;
 
   ClassContext(this.name, this.url, this.method, this.jsonPath);
+}
+
+class CreatedClass {
+  /// The lowercase name of the class
+  final ClassContext context;
+
+  /// The formatted class content
+  final String content;
+
+  /// A map of field names and its type
+  final Map<String, String> fields;
+
+  CreatedClass(this.content, [this.context, this.fields]);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CreatedClass &&
+          runtimeType == other.runtimeType &&
+          mapEquality.equals(fields, other.fields);
+
+  @override
+  int get hashCode => mapEquality.hash(fields);
 }

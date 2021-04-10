@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:http/io_client.dart';
 import 'package:http/http.dart' as http;
 
+export 'shared_classes.dart';
 export 'dart:io';
 
 abstract class BaseRequest {

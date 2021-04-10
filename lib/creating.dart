@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:ondemand_wrapper_gen/extensions.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generate_utils.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generators.dart';
+import 'package:ondemand_wrapper_gen/generator/class/shared_classes.dart';
 import 'package:ondemand_wrapper_gen/har_api.dart';
 
 class Creator {
@@ -211,6 +213,8 @@ class Creator {
           placeholders: ['siteNumber', 'contextId']),
     ];
 
+    var classes = <GeneratedFile, List<SharedClass>>{};
+
     var createdFiles = <CreatedFile>[];
     var usedUrls = <String>[];
     for (var request in requests) {
@@ -218,20 +222,40 @@ class Creator {
       var placeholderData = getPlaceholdered(request.url, entries.keys.toList(), usedUrls);
       var urls = placeholderData.map((e) => e.url).toList();
 
-      var outFile = [generateDirectory, '${request.name}.dart'].file;
-
-      var generatedFile = generate(entries, request.name, urls, generator);
-      if (write) {
-        outFile.writeAsString(generatedFile.generated);
-      }
-
-      createdFiles.add(CreatedFile(request, outFile, generatedFile.method, generatedFile.unbodiedResponse));
+      var generatedFile = generate(entries, request, urls, generator);
+      classes[generatedFile] = generatedFile.generated.values
+          .map((createdClass) => SharedClass(request.name, request, createdClass))
+          .toList();
     }
+
+    var separated = separateClasses(classes, noShareJsonPath: ['request', 'response'], noShareNames: ['Request', 'Response']);
+
+    createdFiles.add(writeShared(generateDirectory, separated.sharedClasses));
+
+    separated.standaloneClasses.forEach((generatedFile, classes) {
+      var outFile = [generateDirectory, '${generatedFile.request.name}.dart'].file;
+
+      var string = StringBuffer();
+      importGenerator(string);
+
+      classes.map((e) => e.content).forEach((line) => string.writeln(line));
+
+      outFile.writeAsString(string.toString());
+      createdFiles.add(CreatedRequestFile(generatedFile.request, outFile, generatedFile.method, generatedFile.unbodiedResponse));
+    });
 
     return createdFiles;
   }
 
-  _GeneratedFile generate(Map<String, List<Entry>> allData, String name,
+  CreatedFile writeShared(Directory generateDirectory, List<SharedClass> sharedClasses) {
+    var outFile = [generateDirectory, 'shared_classes.dart'].file;
+    // No imports needed, classes in other files is a bad idea
+    var content = sharedClasses.map((e) => e.createdClass.content).join('\n');
+    outFile.writeAsString(content);
+    return CreatedFile('shared_classes', outFile);
+  }
+
+  GeneratedFile generate(Map<String, List<Entry>> allData, Request request,
       List<String> urls, GeneratorSettings settings) {
     var aggregated = aggregateList(allData, urls);
 
@@ -243,7 +267,7 @@ class Creator {
     var gen = ClassGenerator.fromSettings(
         settings.copyWith(url: urls.first, method: method, unbodiedResponse: !aggregated.hasResponseBody));
     print(urls.first);
-    return _GeneratedFile(gen.generated(aggregated.aggregated), method, !aggregated.hasResponseBody);
+    return GeneratedFile(gen.generated(aggregated.aggregated), request, method, !aggregated.hasResponseBody);
   }
 
   String getMethod(Map<String, List<Entry>> allData, String url) =>
@@ -310,20 +334,28 @@ class Creator {
 }
 
 class CreatedFile {
-  final Request request;
+  final String name;
   final File created;
-  final String method;
-  final bool unbodiedResponse;
 
-  CreatedFile(this.request, this.created, this.method, this.unbodiedResponse);
+  CreatedFile(this.name, this.created);
 }
 
-class _GeneratedFile {
-  final String generated;
+class CreatedRequestFile extends CreatedFile {
+  final Request request;
   final String method;
   final bool unbodiedResponse;
 
-  _GeneratedFile(this.generated, this.method, this.unbodiedResponse);
+  CreatedRequestFile(this.request, File created, this.method, this.unbodiedResponse)
+    : super(request.name, created);
+}
+
+class GeneratedFile {
+  final Map<String, CreatedClass> generated;
+  final String method;
+  final bool unbodiedResponse;
+  final Request request;
+
+  GeneratedFile(this.generated, this.request, [this.method, this.unbodiedResponse]);
 }
 
 class _AggregatedResponse {

@@ -39,7 +39,7 @@ Future<void> main(List<String> args) async {
   var creator = Creator();
   var created = creator.createWrapper(generateDirectory, bruh, true);
 
-  await GenerateEntryFile().generate('OnDemand', created, ['siteNumber'], [generateDirectory, 'ondemand_requests.dart'].file);
+  await GenerateEntryFile().generate('OnDemand', created.whereType<CreatedRequestFile>().toList(), ['siteNumber'], [generateDirectory, 'ondemand_requests.dart'].file);
 
   await BaseGenerator().generate([generateDirectory, 'base.dart'].file);
 

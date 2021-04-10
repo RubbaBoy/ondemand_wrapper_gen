@@ -1,6 +1,10 @@
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
+
 final encoder = JsonEncoder.withIndent('  ');
+
+const mapEquality = MapEquality();
 
 String prettyEncode(dynamic data) => encoder.convert(data);
 

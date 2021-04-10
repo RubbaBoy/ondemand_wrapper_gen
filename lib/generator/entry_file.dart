@@ -16,13 +16,13 @@ class GenerateEntryFile {
       {this.finalizeFields = true, String Function(String code) formatOutput})
       : formatOutput = formatOutput ?? _formatter.format;
 
-  Future<void> generate(String name, List<CreatedFile> createdFiles, List<String> constantFields, File file) =>
+  Future<void> generate(String name, List<CreatedRequestFile> createdFiles, List<String> constantFields, File file) =>
       file.writeAsString(generateString(name, createdFiles, constantFields));
 
   /// Generates an entry file, containing request methods for every request.
   /// All [constantFields] will be declared in the constructor, e.g. the overall
   /// site ID.
-  String generateString(String name, List<CreatedFile> createdFiles,
+  String generateString(String name, List<CreatedRequestFile> createdFiles,
       List<String> constantFields) {
     var res = StringBuffer();
 
@@ -41,7 +41,7 @@ class GenerateEntryFile {
     return formatOutput(res.toString());
   }
 
-  void generateImports(List<CreatedFile> createdFiles, StringBuffer buffer) {
+  void generateImports(List<CreatedRequestFile> createdFiles, StringBuffer buffer) {
     buffer.writeln("import 'base.dart';");
 
     for (var file in createdFiles) {
@@ -73,7 +73,7 @@ class GenerateEntryFile {
     buffer.writeln('});');
   }
 
-  void createMethod(CreatedFile createdFile, List<String> constantFields,
+  void createMethod(CreatedRequestFile createdFile, List<String> constantFields,
       StringBuffer buffer) {
     var request = createdFile.request;
     var name = '_${request.name}';

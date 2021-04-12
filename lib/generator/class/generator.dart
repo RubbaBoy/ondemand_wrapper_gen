@@ -211,6 +211,12 @@ class ClassGenerator {
     return classes;
   }
 
+  /// Generates a single class from a map of names and types.
+  CreatedClass generatedFromTypes(String name, String jsonPath, Map<String, ElementInfo> fields) {
+    classVisitor(name, {}, jsonPath, extraFields: fields.values.toList());
+    return classes.values.first;
+  }
+
   /// Creates classes and adds them into [classes] with the given [name] and
   /// [json] content. [base] should only be [true] for the first class created.
   /// If both that and [ignoreBase] is [true], the class is not printed, however
@@ -312,6 +318,8 @@ class ClassGenerator {
 
     var hasBody = !(unbodiedResponse && context.jsonPath == 'response');
 
+    var copyFields = [...fields];
+
     [
       (buffer, context, fields) =>
           fieldGenerator(buffer, context, fields, finalizeFields),
@@ -328,7 +336,7 @@ class ClassGenerator {
     res.writeln('}');
 
     if (!base || !(base && ignoreBase)) {
-      classes[name.toLowerCase()] = CreatedClass(formatOutput(res.toString()), context, { for (var field in fields) field.dartName : field.type.generateTypeString(field) });
+      classes[name.toLowerCase()] = CreatedClass(formatOutput(res.toString()), context, Map.unmodifiable({ for (var field in copyFields) field.dartName : field }));
     } else {
       print('Not registering class: $name');
     }
@@ -556,7 +564,7 @@ class CreatedClass {
   final String content;
 
   /// A map of field names and its type
-  final Map<String, String> fields;
+  final Map<String, ElementInfo> fields;
 
   CreatedClass(this.content, [this.context, this.fields]);
 
@@ -565,8 +573,9 @@ class CreatedClass {
       identical(this, other) ||
       other is CreatedClass &&
           runtimeType == other.runtimeType &&
+          context.name == other.context.name &&
           mapEquality.equals(fields, other.fields);
 
   @override
-  int get hashCode => mapEquality.hash(fields);
+  int get hashCode => mapEquality.hash(fields) ^ context.name.hashCode;
 }

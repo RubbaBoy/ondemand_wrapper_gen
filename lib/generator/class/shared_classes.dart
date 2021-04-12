@@ -1,4 +1,6 @@
+import 'package:collection/collection.dart';
 import 'package:ondemand_wrapper_gen/creating.dart';
+import 'package:ondemand_wrapper_gen/generator/class/generate_elements.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generator.dart';
 
 const PRIMITIVES = ['int', 'double', 'bool', 'String', 'dynamic'];
@@ -7,10 +9,12 @@ const COLLECTION_PRIMITIVES = ['Map', 'List'];
 var classes = <CreatedClass, int>{};
 
 /// [noShare] is a list of jsonPaths to NOT share classes with.
+/// [mergeNames] is a list of names to merge
 SharedClassSeparation separateClasses(
     Map<GeneratedFile, List<SharedClass>> generationResult,
     {List<String> noShareJsonPath = const [],
-    List<String> noShareNames = const []}) {
+    List<String> noShareNames = const [],
+    List<String> mergeNames = const []}) {
   var sharedClasses = generationResult.entries
       .map((e) => e.value.toList())
       .reduce((a, b) => [...a, ...b])
@@ -25,22 +29,27 @@ SharedClassSeparation separateClasses(
     }
   }
 
+  // remove all classes with duplicate names
+  classes.removeWhere((createdClass, value) {
+    return classes.keys
+      .where((element) => element != createdClass)
+      .any((element) => element.context.name == createdClass.context.name);
+  });
+
   classes.removeWhere((key, value) => value == 1);
 
-  // remove all classes with duplicate names
-  classes.removeWhere((createdClass, value) => classes.keys
-      .where((element) => element != createdClass)
-      .any((element) => element.context.name == createdClass.context.name));
-
-  var classNames = classes.keys.map((e) => e.context.name).toList();
+  // Remove any class that contains fields that aren't primitive or also shared
+  var classNames;
   var delta;
   do {
     var size = classes.length;
+    classNames = classes.keys.map((e) => e.context.name).toList();
     classes.removeWhere((key, value) => !isValidClass(key, classNames));
     delta = size - classes.length;
   } while (delta != 0);
 
   var _sharedClasses = <SharedClass>{};
+  var _mergedClasses = <SharedClass>{};
 
   classNames = classes.keys.map((e) => e.context.name).toList();
 
@@ -48,7 +57,17 @@ SharedClassSeparation separateClasses(
   generationResult = generationResult.map((generatedFile, gennedClasses) {
     var newClasses = <SharedClass>[];
     for (var clazz in gennedClasses) {
-      dynamic it = classNames.contains(clazz.createdClass.context.name) ? _sharedClasses : newClasses;
+      var name = clazz.createdClass.context.name;
+
+      dynamic it;
+      if (mergeNames.contains(name)) {
+        it = _mergedClasses;
+      } else if (classNames.contains(name)) {
+        it = _sharedClasses;
+      } else {
+        it = newClasses;
+      }
+
       it.add(clazz);
     }
     return MapEntry(generatedFile, newClasses);
@@ -57,23 +76,46 @@ SharedClassSeparation separateClasses(
   var moddedResult = generationResult
       .map((k, v) => MapEntry(k, v.map((e) => e.createdClass).toList()));
 
+  var grouped = groupBy(
+      _mergedClasses.where((sharedClass) =>
+          mergeNames.contains(sharedClass.createdClass.context.name)),
+          (SharedClass sharedClass) => sharedClass.createdClass.context.name);
+
+  _sharedClasses.addAll(grouped
+      .values
+      .map((sharedClasses) => mergeSharedClasses(sharedClasses)));
+
   return SharedClassSeparation(_sharedClasses.toList(), moddedResult);
+}
+
+SharedClass mergeSharedClasses(List<SharedClass> sharedClasses) {
+  var first = sharedClasses.first;
+  var firstContext = first.createdClass.context;
+  var newFields =
+      sharedClasses.map((e) => e.createdClass.fields).reduce((a, b) => {...a, ...b});
+  // TODO: Allow for settings!
+  var generator = ClassGenerator(className: firstContext.name);
+  return SharedClass(first.fileName, first.request, generator.generatedFromTypes(firstContext.name, firstContext.jsonPath, newFields));
 }
 
 /// Returns false if any field has the type of a non-primitive not in the
 /// created class name list.
 bool isValidClass(CreatedClass created, List<String> classNames) {
   var types = created.fields.values.toList();
-  PRIMITIVES.forEach(types.remove);
-  return !types.any((someType) {
-    for (var prim in COLLECTION_PRIMITIVES) {
-      var type = someType.replaceAll(prim, '').replaceAll(RegExp('[<>]'), '');
-      if (!PRIMITIVES.contains(type)) {
-        return true;
-      }
+  // Each any return true if invalid
+  return !types.any((someType) => !isPrimitiveOrLocal(someType, classNames));
+}
+
+bool isPrimitiveOrLocal(ElementInfo info, List<String> classList) {
+  if (!info.type.primitive) {
+    if (info.type == ElementType.Array) {
+      return isPrimitiveOrLocal(info.arrayInfo, classList);
+    } else {
+      return classList.contains(info.type.generateTypeString(info));
     }
-    return false;
-  });
+  } else {
+    return true;
+  }
 }
 
 class SharedClass {

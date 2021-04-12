@@ -9,7 +9,9 @@ import 'package:ondemand_wrapper_gen/har_api.dart';
 
 class Creator {
   /// Creates classes from entries. Returns the list of files created.
-  List<CreatedFile> createWrapper(Directory generateDirectory, Map<String, List<Entry>> entries, [bool write = true]) {
+  List<CreatedFile> createWrapper(
+      Directory generateDirectory, Map<String, List<Entry>> entries,
+      [bool write = true]) {
     final settings = GeneratorSettings.defaultSettings().copyWith(
         childrenRequireAggregation: true,
         forceBaseClasses: true,
@@ -17,7 +19,8 @@ class Creator {
         commentGenerator: defaultCommentGenerator());
 
     var requests = [
-      Request('get_config', 'https://ondemand.rit.edu/api/config', combine: false),
+      Request('get_config', 'https://ondemand.rit.edu/api/config',
+          combine: false),
 
       // siteNumber   get_config => response#tenantId (1312)
       // contextId   get_config => response#contextId (dc9df36d-8a64-42cf-b7c1-fa041f5f3cfd)
@@ -40,7 +43,8 @@ class Creator {
             'response.response.priceLevels'
           ]),
 
-      Request('login', r'https://ondemand.rit.edu/api/login/anonymous/$', placeholders: ['siteNumber']),
+      Request('login', r'https://ondemand.rit.edu/api/login/anonymous/$',
+          placeholders: ['siteNumber']),
 
       // Gets the kitchens in the site
       Request('get_kitchens', r'https://ondemand.rit.edu/api/sites/$',
@@ -56,9 +60,9 @@ class Creator {
             'response.response.pickUpConfig.conceptEntries',
             'response.response.atriumConfig.tenders'
           ],
-      forceToString: [
-        'response.response.atriumConfig#terminalId'
-      ]),
+          forceToString: [
+            'response.response.atriumConfig#terminalId'
+          ]),
 
       // Gets the manifest
       Request('get_manifest',
@@ -90,17 +94,31 @@ class Creator {
       // to a single store, more specific requests being made with
       // its "place" id (For commons the display ID is 2162 and real ID 3403)
       Request(
-          'list_places', r'https://ondemand.rit.edu/api/sites/$/$/concepts/$',
-          placeholders: ['siteNumber', 'contextId', 'displayId'],
-          nameMap: multiResponse('Place', 'places')),
+        'list_places',
+        r'https://ondemand.rit.edu/api/sites/$/$/concepts/$',
+        placeholders: ['siteNumber', 'contextId', 'displayId'],
+        nameMap: {
+          'response.response.menus': 'Menu',
+          'response.response.schedule': 'MenuSchedule',
+          'response.response.schedule.properties': 'MenuProperties',
+          ...multiResponse('Place', 'places'),
+        },
+      ),
 
       // placeId   list_placed => response.[].response#id (3403) is the PLACE id (see above)
       // Gets the menus for a given place (at RIT only one menu is used)
       Request('get_menus',
           r'https://ondemand.rit.edu/api/sites/$/$/concepts/$/menus/$',
-          placeholders: ['siteNumber', 'contextId', 'displayId', 'placeId'],
+          placeholders: [
+            'siteNumber',
+            'contextId',
+            'displayId',
+            'placeId'
+          ],
           nameMap: {
             'request.menus': 'Menu',
+            'request.schedule': 'MenuSchedule',
+            'request.schedule.properties': 'MenuProperties',
             ...multiResponse('Menu', 'menus'),
           }),
 
@@ -135,12 +153,18 @@ class Creator {
           ],
           nameMap: {
             'response.addedItem.priceLevels[]': 'PriceLevel',
-            'request.item.priceLevels[]': 'PriceLevel'
+            'request.item.priceLevels[]': 'PriceLevel',
+            'request.schedule': 'CartSchedule',
+            'request.item.properties': 'CartProperties',
           }),
 
       // orderId (5e446350-e67d-4ec3-a348-2393ccc63691)
       // Adds an item to the cart
       Request('add_cart', r'https://ondemand.rit.edu/api/order/$/$/orders/$',
+          nameMap: {
+            'request.schedule': 'CartSchedule',
+            'request.item.properties': 'CartProperties',
+          },
           placeholders: [
             'siteNumber',
             'contextId',
@@ -219,21 +243,27 @@ class Creator {
     var usedUrls = <String>[];
     for (var request in requests) {
       var generator = request.getSettings(settings);
-      var placeholderData = getPlaceholdered(request.url, entries.keys.toList(), usedUrls);
+      var placeholderData =
+          getPlaceholdered(request.url, entries.keys.toList(), usedUrls);
       var urls = placeholderData.map((e) => e.url).toList();
 
       var generatedFile = generate(entries, request, urls, generator);
       classes[generatedFile] = generatedFile.generated.values
-          .map((createdClass) => SharedClass(request.name, request, createdClass))
+          .map((createdClass) =>
+              SharedClass(request.name, request, createdClass))
           .toList();
     }
 
-    var separated = separateClasses(classes, noShareJsonPath: ['request', 'response'], noShareNames: ['Request', 'Response']);
+    var separated = separateClasses(classes,
+        noShareJsonPath: ['request', 'response'],
+        noShareNames: ['Request', 'Response'],
+        mergeNames: ['Menu', 'CustomLabels', 'NewField', 'Spicy', 'Vegetarian', 'GlutenFree', 'Healthy', 'Vegan']);
 
     createdFiles.add(writeShared(generateDirectory, separated.sharedClasses));
 
     separated.standaloneClasses.forEach((generatedFile, classes) {
-      var outFile = [generateDirectory, '${generatedFile.request.name}.dart'].file;
+      var outFile =
+          [generateDirectory, '${generatedFile.request.name}.dart'].file;
 
       var string = StringBuffer();
       importGenerator(string);
@@ -241,13 +271,15 @@ class Creator {
       classes.map((e) => e.content).forEach((line) => string.writeln(line));
 
       outFile.writeAsString(string.toString());
-      createdFiles.add(CreatedRequestFile(generatedFile.request, outFile, generatedFile.method, generatedFile.unbodiedResponse));
+      createdFiles.add(CreatedRequestFile(generatedFile.request, outFile,
+          generatedFile.method, generatedFile.unbodiedResponse));
     });
 
     return createdFiles;
   }
 
-  CreatedFile writeShared(Directory generateDirectory, List<SharedClass> sharedClasses) {
+  CreatedFile writeShared(
+      Directory generateDirectory, List<SharedClass> sharedClasses) {
     var outFile = [generateDirectory, 'shared_classes.dart'].file;
     // No imports needed, classes in other files is a bad idea
     var content = sharedClasses.map((e) => e.createdClass.content).join('\n');
@@ -264,10 +296,13 @@ class Creator {
     }
 
     var method = getMethod(allData, urls.first);
-    var gen = ClassGenerator.fromSettings(
-        settings.copyWith(url: urls.first, method: method, unbodiedResponse: !aggregated.hasResponseBody));
+    var gen = ClassGenerator.fromSettings(settings.copyWith(
+        url: urls.first,
+        method: method,
+        unbodiedResponse: !aggregated.hasResponseBody));
     print(urls.first);
-    return GeneratedFile(gen.generated(aggregated.aggregated), request, method, !aggregated.hasResponseBody);
+    return GeneratedFile(gen.generated(aggregated.aggregated), request, method,
+        !aggregated.hasResponseBody);
   }
 
   String getMethod(Map<String, List<Entry>> allData, String url) =>
@@ -286,11 +321,17 @@ class Creator {
     }
 
     var hasRequestBody = entries.first.request.method == 'POST';
-    var hasResponseBody = entries.first.response.content.mimeType.contains('application/json');
+    var hasResponseBody =
+        entries.first.response.content.mimeType.contains('application/json');
 
     return _AggregatedResponse({
       'request': [for (var entry in entries) entry.request.postData.json],
-      'response': [if (hasResponseBody) for (var entry in entries) entry.response.content.json else {}]
+      'response': [
+        if (hasResponseBody)
+          for (var entry in entries) entry.response.content.json
+        else
+          {}
+      ]
     }, hasRequestBody, hasResponseBody);
   }
 
@@ -345,8 +386,9 @@ class CreatedRequestFile extends CreatedFile {
   final String method;
   final bool unbodiedResponse;
 
-  CreatedRequestFile(this.request, File created, this.method, this.unbodiedResponse)
-    : super(request.name, created);
+  CreatedRequestFile(
+      this.request, File created, this.method, this.unbodiedResponse)
+      : super(request.name, created);
 }
 
 class GeneratedFile {
@@ -355,7 +397,8 @@ class GeneratedFile {
   final bool unbodiedResponse;
   final Request request;
 
-  GeneratedFile(this.generated, this.request, [this.method, this.unbodiedResponse]);
+  GeneratedFile(this.generated, this.request,
+      [this.method, this.unbodiedResponse]);
 }
 
 class _AggregatedResponse {
@@ -363,7 +406,8 @@ class _AggregatedResponse {
   final bool hasRequestBody;
   final bool hasResponseBody;
 
-  _AggregatedResponse(this.aggregated, this.hasRequestBody, this.hasResponseBody);
+  _AggregatedResponse(
+      this.aggregated, this.hasRequestBody, this.hasResponseBody);
 }
 
 class Request {
@@ -385,11 +429,18 @@ class Request {
   final bool combine;
 
   Request(this.name, this.url,
-      {this.placeholders = const [], this.nameMap, this.forceCounting, this.forceToString = const [], this.combine = true});
+      {this.placeholders = const [],
+      this.nameMap,
+      this.forceCounting,
+      this.forceToString = const [],
+      this.combine = true});
 
   /// Gets the settings with the base (or default) of [base].
   GeneratorSettings getSettings(GeneratorSettings base) => base.copyWith(
-      staticNameTransformer: nameMap, forceObjectCounting: forceCounting, forceToString: forceToString, shareClasses: combine);
+      staticNameTransformer: nameMap,
+      forceObjectCounting: forceCounting,
+      forceToString: forceToString,
+      shareClasses: combine);
 }
 
 /// The [placeholderUrls] is a list of placeholder URLs.
@@ -398,7 +449,7 @@ List<PlaceholderData> getPlaceholdered(
     String placeholderUrl, List<String> absoluteUrls, List<String> usedUrls) {
   var testingUrl = placeholderUrl.split('/').toList();
   return absoluteUrls
-  .where((url) => !usedUrls.contains(url))
+      .where((url) => !usedUrls.contains(url))
       .map((url) => PlaceholderData(url, []))
       .map((placeholderData) {
     var splitUrl = placeholderData.url.split('/');

@@ -183,6 +183,24 @@ class ElementInfo {
         generator: classGenerator, parentPath: jsonPath);
   }
 
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ElementInfo &&
+          runtimeType == other.runtimeType &&
+          dartName == other.dartName &&
+          type == other.type &&
+          arrayInfo == other.arrayInfo &&
+          countingKey == other.countingKey;
+
+  @override
+  int get hashCode =>
+      dartName.hashCode ^
+      type.hashCode ^
+      arrayInfo.hashCode ^
+      countingKey.hashCode;
+
   @override
   String toString() {
     return 'ElementInfo{jsonName: $jsonName, dartName: $dartName, objectName: $objectName, type: $type, arrayInfo: $arrayInfo, countingKey: $countingKey}';
@@ -363,8 +381,20 @@ class ElementType {
       ? ElementType.Unknown
       : Precedence.firstWhere((element) => element.test(value));
 
+
   @override
-  core.String toString() => 'ElementType{name: $name}';
+  bool operator ==(core.Object other) =>
+      identical(this, other) ||
+      other is ElementType &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          primitive == other.primitive;
+
+  @override
+  int get hashCode => name.hashCode ^ primitive.hashCode;
+
+  @override
+  core.String toString() => 'ElementType{name: $name, primitive: $primitive}';
 }
 
 /// Used for generating simple code using the Dart name and extra [ElementInfo].

@@ -16,7 +16,16 @@ class Creator {
         childrenRequireAggregation: true,
         forceBaseClasses: true,
         combineNameTransformers: true,
-        commentGenerator: defaultCommentGenerator());
+        commentGenerator: defaultCommentGenerator(),
+        nameTransformer: (path, name) {
+          if (name == 'PriceLevelsNum') {
+            return 'PriceLevel';
+          } else if (name.startsWith('Price') &&
+              (name.isEmpty || name.substring(5).isNumeric)) {
+            return 'Price';
+          }
+          return name;
+        });
 
     var requests = [
       Request('get_config', 'https://ondemand.rit.edu/api/config',
@@ -34,8 +43,6 @@ class Creator {
           nameMap: {
             'response.response': 'FoodItem',
             'response.response.childGroups': 'ChildGroup',
-            'response.response.itemImages': 'ItemImage',
-            'response.response.priceLevels[]': 'PriceLevel',
             'response#response': 'items',
             'response': 'Response'
           },
@@ -50,6 +57,10 @@ class Creator {
       Request('get_kitchens', r'https://ondemand.rit.edu/api/sites/$',
           placeholders: [
             'siteNumber'
+          ],
+          forceSeparate: [
+            'manualDeduct',
+            'autoDeduct'
           ],
           nameMap: {
             ...multiResponse('Kitchen', 'kitchens'),
@@ -84,7 +95,6 @@ class Creator {
             ...multiRequest('KitchenRequest', 'kitchenRequests'),
             'response[]': 'Kitchen',
             'response#response': 'kitchens',
-            // 'response': 'kitchens',
           },
           forceCounting: [
             'response'
@@ -133,7 +143,6 @@ class Creator {
           ],
           nameMap: {
             'response.childGroups': 'ChildGroup',
-            'response.itemImages': 'ItemImage',
             'response.priceLevels[]': 'PriceLevel',
             'response.modifiers': 'Modifiers',
             'response.modifiers.modifiers': 'Modifier'
@@ -145,38 +154,46 @@ class Creator {
 
       // Adds an order to your open orderId (in the request)
       // Orders are stored server-side. I'm not sure where the order number comes from, though
-      // This and add_cart are the same, this just provides some more request parameters
-      Request('add_cart_adv', r'https://ondemand.rit.edu/api/order/$/$/orders',
+      // This and add_cart are the same, this just creates a new order/cart
+      Request('add_cart_new', r'https://ondemand.rit.edu/api/order/$/$/orders',
           placeholders: [
             'siteNumber',
             'contextId'
+          ],
+          forceSeparate: [
+            'properties'
           ],
           nameMap: {
             'response.addedItem.priceLevels[]': 'PriceLevel',
             'request.item.priceLevels[]': 'PriceLevel',
             'request.schedule': 'CartSchedule',
             'request.item.properties': 'CartProperties',
+            'response.addedItem.selectedModifiers': 'AddedSelectedModifiers'
           }),
 
       // orderId (5e446350-e67d-4ec3-a348-2393ccc63691)
       // Adds an item to the cart
       Request('add_cart', r'https://ondemand.rit.edu/api/order/$/$/orders/$',
-          nameMap: {
-            'request.schedule': 'CartSchedule',
-            'request.item.properties': 'CartProperties',
-          },
           placeholders: [
             'siteNumber',
             'contextId',
             'orderId'
           ],
+          forceSeparate: [
+            'properties'
+          ],
           forceCounting: [
-            'response.addedItem.priceLevels',
-            'request.item.priceLevels'
-          ]),
+            'response.addedItem.priceLevels'
+          ],
+          nameMap: {
+            'response.addedItem.priceLevels[]': 'PriceLevel',
+            'request.item.priceLevels[]': 'PriceLevel',
+            'request.schedule': 'CartSchedule',
+            'request.item.properties': 'CartProperties',
+            'response.addedItem.selectedModifiers': 'AddedSelectedModifiers'
+          }),
 
       // Checks account balances for the given logged in account.
-      // TODO: Explain what `request.request.data` is
       Request('account_inquiry',
           r'https://ondemand.rit.edu/api/atrium/accountInquiry',
           nameMap: {
@@ -209,7 +226,13 @@ class Creator {
       // Uses data from account_inquiry => response.response
       Request('auth_payment',
           r'https://ondemand.rit.edu/api/atrium/authAtriumPayment',
-          forceCounting: ['request.paymentTenderInfo']),
+          nameMap: {
+            'response.data.paymentData.paymentResponse.paymentSupport.amount':
+                'Price',
+          },
+          forceCounting: [
+            'request.paymentTenderInfo'
+          ]),
 
       // Ensures that the order can be placed during the selected time
       Request(
@@ -220,7 +243,6 @@ class Creator {
       // Actually places the order
       Request('create_closed_order',
           r'https://ondemand.rit.edu/api/order/createMultiPaymentClosedOrder',
-          nameMap: {'request.receiptInfo.items.priceLevels[]': 'PriceLevel'},
           forceCounting: ['request.receiptInfo.items.priceLevels']),
 
       // Gets the SMS text to send
@@ -234,7 +256,8 @@ class Creator {
       // Gets the estimated wait time for the given items
       Request('get_wait_time',
           r'https://ondemand.rit.edu/api/order/$/$/getWaitTimeForItems',
-          placeholders: ['siteNumber', 'contextId']),
+          placeholders: ['siteNumber', 'contextId'],
+          forceCounting: ['request.cartItems.priceLevels']),
     ];
 
     var classes = <GeneratedFile, List<SharedClass>>{};
@@ -254,10 +277,30 @@ class Creator {
           .toList();
     }
 
-    var separated = separateClasses(classes,
-        noShareJsonPath: ['request', 'response'],
-        noShareNames: ['Request', 'Response'],
-        mergeNames: ['Menu', 'CustomLabels', 'NewField', 'Spicy', 'Vegetarian', 'GlutenFree', 'Healthy', 'Vegan']);
+    var separated = separateClasses(classes, noShareJsonPath: [
+      'request',
+      'response'
+    ], noShareNames: [
+      'Request',
+      'Response'
+    ], mergeNames: [
+      'Menu',
+      /* I forget lol */
+      'CustomLabels',
+      'NewField',
+      'Spicy',
+      'Vegetarian',
+      'GlutenFree',
+      'Healthy',
+      'Vegan',
+      /* USed for adding to cart */
+      'CategoryOptions',
+      'Categories',
+      'Item',
+      'PriceLevels',
+      'CartProperties',
+      'SelectedModifiers'
+    ]);
 
     createdFiles.add(writeShared(generateDirectory, separated.sharedClasses));
 
@@ -420,11 +463,13 @@ class Request {
   /// The placeholders of the URL, in order of the inserted $'s.
   final List<String> placeholders;
 
-  final Map<String, String> nameMap;
+  final Map<dynamic, String> nameMap;
 
   final List<String> forceCounting;
 
   final List<String> forceToString;
+
+  final List<String> forceSeparate;
 
   final bool combine;
 
@@ -433,6 +478,7 @@ class Request {
       this.nameMap,
       this.forceCounting,
       this.forceToString = const [],
+      this.forceSeparate = const [],
       this.combine = true});
 
   /// Gets the settings with the base (or default) of [base].
@@ -440,6 +486,7 @@ class Request {
       staticNameTransformer: nameMap,
       forceObjectCounting: forceCounting,
       forceToString: forceToString,
+      forceSeparate: forceSeparate,
       shareClasses: combine);
 }
 

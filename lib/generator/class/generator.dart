@@ -5,7 +5,6 @@ import 'package:dart_style/dart_style.dart';
 import 'package:ondemand_wrapper_gen/generator/class/generators.dart';
 import 'package:ondemand_wrapper_gen/utility.dart';
 
-
 import 'generate_elements.dart';
 import 'generate_utils.dart';
 
@@ -84,6 +83,9 @@ class ClassGenerator {
   /// inconsistencies of ints and strings present in the Agilysys OnDemand API.
   final List<String> forceToString;
 
+  /// Forces the separation of classes with a JSON path in the list.
+  final List<String> forceSeparate;
+
   /// Name, Content
   final classes = <String, CreatedClass>{};
 
@@ -118,15 +120,16 @@ class ClassGenerator {
     this.commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
-    Map<String, String> staticNameTransformer = const {},
-    Map<String, String> staticArrayTransformer = const {},
+    Map<dynamic, String> staticNameTransformer = const {},
+    Map<dynamic, String> staticArrayTransformer = const {},
     this.forceObjectCounting = const [],
     this.forceToString = const [],
+    this.forceSeparate = const [],
   }) : formatOutput = formatOutput ?? _formatter.format {
-
     var backupNameTransformer = nameTransformer ?? identitySecond;
     this.nameTransformer = (path, name) =>
-        staticNameTransformer[path] ?? backupNameTransformer(path, name);
+        getFromStaticTransformer(staticNameTransformer, path) ??
+        backupNameTransformer(path, name);
 
     if (combineNameTransformers) {
       this.arrayTransformer = this.nameTransformer;
@@ -134,9 +137,20 @@ class ClassGenerator {
       var backupArrayTransformer =
           arrayTransformer ?? (_, name) => name + '_array';
       this.arrayTransformer = (path, name) =>
-      staticArrayTransformer[path] ?? backupArrayTransformer(path, name);
+          getFromStaticTransformer(staticArrayTransformer, path) ??
+          backupArrayTransformer(path, name);
     }
   }
+
+  static String getFromStaticTransformer(
+          Map<dynamic, String> map, String path) =>
+      map.entries.firstWhere((element) {
+        if (element.key is List) {
+          return element.key.contains(path);
+        } else {
+          return element.key == path;
+        }
+      }, orElse: () => null)?.value;
 
   factory ClassGenerator.fromSettings(GeneratorSettings settings) =>
       ClassGenerator(
@@ -158,7 +172,8 @@ class ClassGenerator {
           staticNameTransformer: settings.staticNameTransformer,
           staticArrayTransformer: settings.staticArrayTransformer,
           forceObjectCounting: settings.forceObjectCounting,
-          forceToString: settings.forceToString);
+          forceToString: settings.forceToString,
+          forceSeparate: settings.forceSeparate);
 
   /// Generates a wrapper for the given JSON (without imports)
   Map<String, CreatedClass> generated(Map<String, dynamic> json) {
@@ -212,7 +227,8 @@ class ClassGenerator {
   }
 
   /// Generates a single class from a map of names and types.
-  CreatedClass generatedFromTypes(String name, String jsonPath, Map<String, ElementInfo> fields) {
+  CreatedClass generatedFromTypes(
+      String name, String jsonPath, Map<String, ElementInfo> fields) {
     classVisitor(name, {}, jsonPath, extraFields: fields.values.toList());
     return classes.values.first;
   }
@@ -323,9 +339,11 @@ class ClassGenerator {
     [
       (buffer, context, fields) =>
           fieldGenerator(buffer, context, fields, finalizeFields),
-      (buffer, context, fields) => constructorGenerator(buffer, context, fields, requireHeader),
+      (buffer, context, fields) =>
+          constructorGenerator(buffer, context, fields, requireHeader),
       (buffer, context, fields) => getKey(buffer, context, fields, jsonType),
-      (buffer, ClassContext context, fields) => fromJson(buffer, context, fields, forceToString, jsonType, requireHeader, hasBody),
+      (buffer, ClassContext context, fields) => fromJson(buffer, context,
+          fields, forceToString, jsonType, requireHeader, hasBody),
       (buffer, context, fields) => toJson(buffer, context, fields, jsonType),
       ...extraGenerators,
     ].forEach((generator) {
@@ -336,7 +354,11 @@ class ClassGenerator {
     res.writeln('}');
 
     if (!base || !(base && ignoreBase)) {
-      classes[name.toLowerCase()] = CreatedClass(formatOutput(res.toString()), context, Map.unmodifiable({ for (var field in copyFields) field.dartName : field }));
+      classes[name.toLowerCase()] = CreatedClass(
+          formatOutput(res.toString()),
+          context,
+          Map.unmodifiable(
+              {for (var field in copyFields) field.dartName: field}));
     } else {
       print('Not registering class: $name');
     }
@@ -364,7 +386,11 @@ class ClassGenerator {
   /// If it would create a duplicate name, if [shareClasses] is true, it will
   /// simply return `null` and no class should be created.
   bool createNewClass(String jsonName) {
-    if (classes.containsKey(jsonName) && shareClasses) {
+    if (forceSeparate.contains(jsonName.toLowerCase())) {
+      return true;
+    }
+
+    if (classes.containsKey(jsonName.toLowerCase()) && shareClasses) {
       return false;
     }
 
@@ -372,12 +398,22 @@ class ClassGenerator {
   }
 
   /// Creates a Dart class name in PascalCase from the given JSON field name.
-  /// Ignores [sharedClasses]. If [respectDuplicates] is true and it would be a
+  /// Ignores [sharedClasses]. If [respectOverflow] is true and it would be a
   /// duplicate, it will append the incrementing number of clashes it has has.
   String createClassName(String path, String jsonName,
       {bool respectOverflow = true}) {
     var name = pascal(jsonName);
-    if (classes.containsKey(jsonName) && respectOverflow) {
+    var forceStuff = false;
+
+    if (respectOverflow) {
+      forceStuff = classes.containsKey(jsonName.toLowerCase());
+    }
+
+    if (!forceStuff) {
+      forceStuff = forceSeparate.contains(jsonName.toLowerCase());
+    }
+
+    if (forceStuff) {
       clashes.putIfAbsent(name, () => 0);
       name = '$name${++clashes[name]}';
     }
@@ -412,10 +448,11 @@ class GeneratorSettings {
   final BlockCommentGenerator commentGenerator;
   final NameTransformer nameTransformer;
   final NameTransformer arrayTransformer;
-  final Map<String, String> staticNameTransformer;
-  final Map<String, String> staticArrayTransformer;
+  final Map<dynamic, String> staticNameTransformer;
+  final Map<dynamic, String> staticArrayTransformer;
   final List<String> forceObjectCounting;
   final List<String> forceToString;
+  final List<String> forceSeparate;
 
   /// Creates a [GeneratorSettings] with the default values.
   factory GeneratorSettings.defaultSettings() => GeneratorSettings(
@@ -432,6 +469,7 @@ class GeneratorSettings {
         staticArrayTransformer: const {},
         forceObjectCounting: const [],
         forceToString: const [],
+        forceSeparate: const [],
       );
 
   /// Creates a [GeneratorSettings] with all null values. Suggested as the
@@ -456,7 +494,8 @@ class GeneratorSettings {
       this.staticNameTransformer,
       this.staticArrayTransformer,
       this.forceObjectCounting,
-      this.forceToString});
+      this.forceToString,
+      this.forceSeparate});
 
   /// Creates a [GeneratorSettings] with the same values as [merging] but in
   /// the case of null values, using [fallback].
@@ -474,7 +513,8 @@ class GeneratorSettings {
         extraGenerators: merging.extraGenerators ?? fallback.extraGenerators,
         shareClasses: merging.shareClasses ?? fallback.shareClasses,
         finalizeFields: merging.finalizeFields ?? fallback.finalizeFields,
-        combineNameTransformers: merging.combineNameTransformers ?? fallback.combineNameTransformers,
+        combineNameTransformers:
+            merging.combineNameTransformers ?? fallback.combineNameTransformers,
         unbodiedResponse: merging.unbodiedResponse ?? fallback.unbodiedResponse,
         commentGenerator: merging.commentGenerator ?? fallback.commentGenerator,
         nameTransformer: merging.nameTransformer ?? fallback.nameTransformer,
@@ -485,8 +525,8 @@ class GeneratorSettings {
             merging.staticArrayTransformer ?? fallback.staticArrayTransformer,
         forceObjectCounting:
             merging.forceObjectCounting ?? fallback.forceObjectCounting,
-        forceToString:
-            merging.forceToString ?? fallback.forceToString,
+        forceToString: merging.forceToString ?? fallback.forceToString,
+        forceSeparate: merging.forceSeparate ?? fallback.forceSeparate,
       );
 
   /// The same as merging settings with the [merging] be [newValues] and the
@@ -510,10 +550,11 @@ class GeneratorSettings {
     BlockCommentGenerator commentGenerator,
     NameTransformer nameTransformer,
     NameTransformer arrayTransformer,
-    Map<String, String> staticNameTransformer,
-    Map<String, String> staticArrayTransformer,
+    Map<dynamic, String> staticNameTransformer,
+    Map<dynamic, String> staticArrayTransformer,
     List<String> forceObjectCounting,
     List<String> forceToString,
+    List<String> forceSeparate,
   }) =>
       GeneratorSettings.mergeSettings(
           GeneratorSettings(
@@ -536,6 +577,7 @@ class GeneratorSettings {
             staticArrayTransformer: staticArrayTransformer,
             forceObjectCounting: forceObjectCounting,
             forceToString: forceToString,
+            forceSeparate: forceSeparate,
           ),
           this);
 }

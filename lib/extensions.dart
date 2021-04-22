@@ -55,4 +55,7 @@ extension StringUtils on String {
   Directory get directory => Directory(this);
 
   Uri get uri => Uri.tryParse(this);
+
+  bool get isNumeric =>
+      double.tryParse(this) != null;
 }
